@@ -79,7 +79,7 @@ export const chatApiClient = async <T=any, K=any>(requestConfig: AxiosRequestCon
   const token = getToken()
   try {
     const response = await axiosChatApiInstance.request({
-      url: `/${requestConfig.endpoint}`,
+      url: `${process.env.NEXT_PUBLIC_CHAT_API_URL}/${requestConfig.endpoint}`,
       ...configs,
       headers: { ...token && { Authorization: `Bearer ${token}` }, ...configs.headers }
     })
