@@ -191,6 +191,51 @@ class PublicUserResetPasswordAPIView(views.APIView):
         )
 
 
+
+class PublicUserResetPasswordMobileAPIView(views.APIView):
+    permission_classes = (AllowAny,)
+    swagger_tags = ["Auth"]
+
+    @method_decorator(exception_handler)
+    def post(self, request, *args, **kwargs):
+        serializer = ResetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        username = f"{request.data['phone_number']}_{request.data['u_type']}"
+
+        if username.split("_")[1] != 'host':
+            username_guest = f"{request.data['phone_number']}_{'guest'}"
+
+
+        user = User.objects.get(username=username)
+        # user_guest
+
+        if not OtpService.validate_otp(
+            input_otp=request.data["otp"],
+            username=username,
+            scope=OtpScopeOption.RESET_PASSWORD,
+        ):
+            return Response(
+                {"message": "Invalid otp"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        OtpService.delete_otp(username=username, scope=OtpScopeOption.RESET_PASSWORD)
+        password = request.data["password"]
+        user.set_password(raw_password=password)
+        user.save()
+
+        access_token, refresh_token = create_tokens(user=user)
+        data = {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+        }
+
+        return Response(
+            data,
+            status=status.HTTP_200_OK,
+        )
+
+
 class PublicAdminResetPasswordAPIView(views.APIView):
     permission_classes = (AllowAny,)
     swagger_tags = ["Auth"]
