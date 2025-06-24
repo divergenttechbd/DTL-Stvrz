@@ -597,12 +597,13 @@ class PublicUserRegisterAPIViewHost(views.APIView):
         phone_number = validated_data['phone_number']
 
         validation_username = f"{phone_number}_{primary_user_type}"
-        if not OtpService.validate_otp(
-            input_otp=validated_data["otp"],
-            username=validation_username,
-            scope=OtpScopeOption.REGISTER,
-        ):
-            raise ValidationError({"message": "Invalid OTP"})
+        # todo:// change to uncomment
+        # if not OtpService.validate_otp(
+        #     input_otp=validated_data["otp"],
+        #     username=validation_username,
+        #     scope=OtpScopeOption.REGISTER,
+        # ):
+        #     raise ValidationError({"message": "Invalid OTP"})
 
         primary_user = None
         secondary_user = None
