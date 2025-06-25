@@ -7,7 +7,7 @@ from accounts.views.user import (
     UserUnreadMessageCountAPIView,
     logout,
     mobile_login, UserSelfieVerificationAPIView, SuperhostProgressAPIView, ListHostsInRadiusAPIView,
-    HostCohostingAvailabilityUpdateAPIView,
+    HostCohostingAvailabilityUpdateAPIView, UserPasswordChangeMobile,
 )
 from django.urls import path
 
@@ -37,6 +37,7 @@ urlpatterns = [
         name="email_verification",
     ),
     path("password-change/", UserPasswordChange.as_view(), name="password_change"),
+    path("password-change-dual/", UserPasswordChangeMobile.as_view(), name="password_change_dual"),
     path("reviews/", UserReviewListApi.as_view(), name="review_list"),
     path(
         "logout/",

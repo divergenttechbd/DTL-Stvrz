@@ -399,6 +399,55 @@ class UserPasswordChange(APIView):
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+class UserPasswordChangeMobile(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+
+        user = request.user
+
+        serializer = ChangePasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+
+        if not user.check_password(serializer.validated_data.get("old_password")):
+            return Response(
+                {"message": "Wrong password."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            phone_number, current_u_type = user.username.split('_', 1)
+        except ValueError:
+            return Response(
+                {"message": "User data inconsistency. Cannot process request."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        other_u_type = "guest" if current_u_type == "host" else "host"
+        other_username = f"{phone_number}_{other_u_type}"
+
+        with transaction.atomic():
+
+            try:
+                other_user = User.objects.select_for_update().get(username=other_username)
+            except User.DoesNotExist:
+                other_user = None
+
+            new_password = serializer.validated_data.get("new_password")
+
+
+            user.set_password(new_password)
+            user.save()
+
+            if other_user:
+                other_user.set_password(new_password)
+                other_user.save()
+
+        return Response(
+            {"message": "Password updated successfully"}, status=status.HTTP_200_OK
+        )
+
 
 class UserReviewListApi(ListAPIView):
     permission_classes = (IsAuthenticated,)
