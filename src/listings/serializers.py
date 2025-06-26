@@ -23,12 +23,19 @@ class CategorySerializer(DynamicFieldsModelSerializer):
         fields = "__all__"
 
 
+
+class UserSerializerX(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["id", "email", "image", "identity_verification_status", "status", "current_superhost_tier"]
+
+
 class ListingSerializer(DynamicFieldsModelSerializer):
     latitude = FloatField(source="location.y", read_only=True)
     longitude = FloatField(source="location.x", read_only=True)
     instant_booking_allowed = BooleanField(required=False)
     require_guest_good_track_record = BooleanField(required=False)
-
+    host = UserSerializerX(read_only=True)
     category_name = serializers.SerializerMethodField()
 
 

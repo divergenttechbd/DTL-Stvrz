@@ -145,6 +145,7 @@ class UserProfile(BaseModel):
     bio = models.TextField(blank=True)
     languages = ArrayField(models.CharField(max_length=50), blank=True)
     emergency_contact = models.CharField(max_length=50, blank=True)
+    gender = models.CharField(max_length=50, blank=True)
 
     class Meta:
         verbose_name = "User Profile"
