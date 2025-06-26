@@ -22,7 +22,7 @@ from rest_framework.views import APIView
 
 from base.helpers.constants import (
     PLACE_TYPE_DESCRIPTION_MAPPING,
-    PLACE_TYPE_ICON_MAPPING,
+    PLACE_TYPE_ICON_MAPPING, PLACE_TYPE_ICON_MOBILE_MAPPING,
 )
 from base.helpers.decorators import exception_handler
 from base.permissions import HostUserHasObjectAccess, IsHostUser, IsPrimaryHostOrActiveCoHost
@@ -48,9 +48,9 @@ class HostListingConfigurationApiView(views.APIView):
     swagger_tags = ["Host Listings"]
 
     def get(self, request, *args, **kwargs):
-        categories = list(Category.objects.filter().values("id", "name", "icon"))
+        categories = list(Category.objects.filter().values("id", "name", "icon", "icon_mobile"))
         amenity_data = list(
-            Amenity.objects.filter().values("a_type", "id", "name", "icon")
+            Amenity.objects.filter().values("a_type", "id", "name", "icon", "icon_mobile")
         )
 
         amenity_list_dict = dict()
@@ -64,6 +64,7 @@ class HostListingConfigurationApiView(views.APIView):
                     "id": choice.value,
                     "name": choice.value.replace("_", " ").title(),
                     "icon": PLACE_TYPE_ICON_MAPPING.get(choice.value),
+                    "icon_mobile": PLACE_TYPE_ICON_MOBILE_MAPPING.get(choice.value),
                     "short_description": PLACE_TYPE_DESCRIPTION_MAPPING.get(
                         choice.value
                     ),

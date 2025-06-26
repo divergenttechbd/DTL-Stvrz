@@ -404,9 +404,9 @@ class PublicListingConfigurationListApiView(views.APIView):
     swagger_tags = ["Public Listings"]
 
     def get(self, request, *args, **kwargs):
-        categories = list(Category.objects.filter().values("id", "name", "icon"))
+        categories = list(Category.objects.filter().values("id", "name", "icon", "icon_mobile"))
         amenity_data = list(
-            Amenity.objects.filter().values("a_type", "id", "name", "icon")
+            Amenity.objects.filter().values("a_type", "id", "name", "icon", "icon_mobile")
         )
 
         amenity_list_dict = dict()
