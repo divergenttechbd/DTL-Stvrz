@@ -33,6 +33,8 @@ type Props = {
 export default function TourItem({ tour, onView, onEdit, onDelete }: Props) {
   const popover = usePopover();
 
+  // console.log('tour data', tour);
+
   const {
     id,
     title,
@@ -190,7 +192,9 @@ export default function TourItem({ tour, onView, onEdit, onDelete }: Props) {
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(window.location.href);
+      await navigator.clipboard.writeText(
+        `https://stayverz.divergenttechbd.com/rooms/${tour?.unique_id}`
+      );
       setSnackbarOpen(true);
     } catch (err) {
       console.error('Failed to copy URL:', err);
@@ -258,14 +262,16 @@ export default function TourItem({ tour, onView, onEdit, onDelete }: Props) {
           <Iconify icon="solar:trash-bin-trash-bold" />
           Delete
         </MenuItem>
-        <MenuItem
-          onClick={() => {
-            handleCopy();
-          }}
-        >
-          <Iconify icon="line-md:link" />
-          Share
-        </MenuItem>
+        {status === 'published' && (
+          <MenuItem
+            onClick={() => {
+              handleCopy();
+            }}
+          >
+            <Iconify icon="line-md:link" />
+            Share
+          </MenuItem>
+        )}
       </CustomPopover>
 
       <Snackbar

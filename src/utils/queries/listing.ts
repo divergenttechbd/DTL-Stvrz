@@ -36,3 +36,8 @@ export const getDistrictPoints: any = async (data: any) => {
   const endpoint = "/maps/get-district-points/";
   return axios.get<any>(endpoint, { params: data });
 };
+
+export const getSubDistrictPoints: any = async (data: any) => {
+  const endpoint = `/maps/api/sub-districts-by-district/?district_name=${data.q}`;
+  return axios.get<any>(endpoint);
+};

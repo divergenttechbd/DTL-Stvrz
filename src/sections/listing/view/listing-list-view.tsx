@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Container from '@mui/material/Container';
 import Stack from '@mui/material/Stack';
+import * as XLSX from 'xlsx';
 import Iconify from 'src/components/iconify';
 import Button from '@mui/material/Button';
 // routes
@@ -43,6 +44,8 @@ const defaultFilters: IListingFilters = {
   latitude: '',
   longitude: '',
   radius: 25,
+  district: '',
+  sub_disctrict: '',
 };
 
 // ----------------------------------------------------------------------
@@ -60,7 +63,7 @@ export default function TourListView({ fromUserDetails, userId }: ListingsListVi
   const openFilters = useBoolean();
 
   const [listData, setListData] = useState<IListingItem[]>([]);
-  // console.log('listData', listData);
+  console.log('listData', listData);
   const [listMeta, setListMeta] = useState<any>();
   const [categoryOptions, setCategoryOptions] = useState<
     {
@@ -74,7 +77,7 @@ export default function TourListView({ fromUserDetails, userId }: ListingsListVi
   });
 
   const [filters, setFilters] = useState(defaultFilters);
-  console.log('filters', filters);
+  // console.log('filters', filters);
 
   const getListingList = useCallback(async (data: any) => {
     try {
@@ -206,6 +209,36 @@ export default function TourListView({ fromUserDetails, userId }: ListingsListVi
     />
   );
 
+  // Excel export function
+  const handleExport = async () => {
+    try {
+      // const res = await getListings({ bookings: true, page: 1, page_size: 100000000 });
+      // if (!res.success) throw res.data;
+      // const reportData = res.data;
+      const dataForExport = listData?.map((entry: any) => ({
+        'Guest Name': entry?.guest?.full_name,
+        'Guest Phone Number': entry?.guest?.phone_number,
+        'Host Name': entry?.host?.full_name,
+        'Host Phone Number': entry?.host?.phone_number,
+        'Check-In': entry?.check_in,
+        'Check-Out': entry?.check_out,
+        'Booking Date & Time': entry?.created_at,
+        Listing: entry?.listing?.title,
+        'Confirmation Code': entry?.reservation_code,
+        'Guest Paid': entry?.paid_amount,
+        'Review Details': entry?.reviews[0]?.rating,
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(dataForExport);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Booking List Report');
+      const today = new Date().toISOString().split('T')[0];
+      XLSX.writeFile(workbook, `booking_list_report_${today}.xlsx`);
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
   return (
     <Container maxWidth={settings.themeStretch ? false : 'lg'}>
       {!fromUserDetails && (
@@ -229,6 +262,9 @@ export default function TourListView({ fromUserDetails, userId }: ListingsListVi
               mb: { xs: 3, md: 5 },
             }}
           />
+          <Button variant="contained" onClick={handleExport}>
+            <Iconify icon="solar:download-bold" sx={{ marginRight: 1 }} /> Download
+          </Button>
         </Stack>
       )}
 

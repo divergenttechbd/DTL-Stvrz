@@ -29,7 +29,7 @@ import Iconify from 'src/components/iconify';
 import Scrollbar from 'src/components/scrollbar';
 import { IUserItem } from 'src/types/user';
 import { getUsers } from 'src/utils/queries/users';
-import { getDistrictPoints } from 'src/utils/queries/listing';
+import { getDistrictPoints, getSubDistrictPoints } from 'src/utils/queries/listing';
 
 const verificationOptions = [
   { label: 'Verified', value: 'verified' },
@@ -61,6 +61,7 @@ type TourFilterProps = {
 };
 
 type DistrictOption = { label: string; id: number };
+type SubDistrictOption = { name: string; lat: number; long: number };
 
 export default function TourFilters({
   open,
@@ -80,7 +81,10 @@ export default function TourFilters({
 }: TourFilterProps) {
   const [hosts, setHosts] = useState<{ label: string; value: string }[]>([]);
   const [selectedDistrict, setSelectedDistrict] = useState<DistrictOption | null>(null);
-  console.log('selectedDistrict', selectedDistrict);
+  // console.log('selected District', selectedDistrict);
+  const [subDistrict, setSubDistrict] = useState<any | null>([]);
+  const [selectedSubDistrict, setSelectedSubDistrict] = useState<any | null>(null);
+  // console.log('subDistrict', subDistrict);
 
   const options = [
     { label: 'Bagerhat', id: 1 },
@@ -224,29 +228,33 @@ export default function TourFilters({
     [onFilters]
   );
 
-  const handleGeDistrictPoints = async (value: { label: string; id: number } | null) => {
+  const handleGetDistrictPoints = async (value: { label: string; id: number } | null) => {
     if (!value) return;
 
     try {
-      const res = await getDistrictPoints({ q: value.label });
+      const res = await getSubDistrictPoints({ q: value.label });
       if (!res.success) throw res.data;
-      console.log('geo coords', res.data[0].center.coordinates);
-      const coordsData = res.data[0].center.coordinates;
-
-      if (Array.isArray(coordsData) && coordsData.length === 2) {
-        console.log('=====================');
-        const [longitude, latitude] = coordsData;
-        console.log('------------------', latitude);
-        console.log('------------------', longitude);
-        onFilters('latitude', latitude);
-        onFilters('longitude', longitude);
-        onFilters('sort_by', 'nearest');
-      }
-      console.log('-----------------------------');
+      const coordsData = res.data;
+      setSubDistrict(coordsData);
     } catch (err) {
       console.log(err);
     }
   };
+
+  const handleGetAreaResult = useCallback(
+    (value: { name: string; lat: any; long: any } | null) => {
+      if (!value) return;
+
+      try {
+        onFilters('latitude', value.lat);
+        onFilters('longitude', value.long);
+        onFilters('sort_by', 'nearest');
+      } catch (err) {
+        console.log(err);
+      }
+    },
+    [onFilters]
+  );
 
   // filters component
   const renderHead = (
@@ -260,7 +268,14 @@ export default function TourFilters({
         Filters
       </Typography>
       <Tooltip title="Reset">
-        <IconButton onClick={onResetFilters}>
+        <IconButton
+          onClick={() => {
+            setSubDistrict([]);
+            setSelectedDistrict(null);
+            setSelectedSubDistrict(null);
+            onResetFilters();
+          }}
+        >
           <Badge color="error" variant="dot" invisible={!canReset}>
             <Iconify icon="solar:restart-bold" />
           </Badge>
@@ -280,15 +295,46 @@ export default function TourFilters({
         value={selectedDistrict}
         onChange={(event, newValue) => {
           setSelectedDistrict(newValue);
-          handleGeDistrictPoints(newValue);
-          console.log('Selected:', newValue); // you can also call a handler here
+          handleGetDistrictPoints(newValue);
+          console.log('Selected district:', newValue); // you can also call a handler here
         }}
         getOptionLabel={(option) => option.label}
         isOptionEqualToValue={(option, value) => option.id === value?.id}
         renderInput={(params) => (
-          <TextField {...params} label="Search Area..." variant="outlined" />
+          <TextField
+            {...params}
+            value={selectedDistrict}
+            label="Search Area..."
+            variant="outlined"
+          />
         )}
         renderOption={(props, option) => <li {...props}>{option.label}</li>}
+      />
+    </FormControl>
+  );
+
+  const renderSubAreaSearch = (
+    <FormControl fullWidth>
+      <Autocomplete
+        fullWidth
+        options={subDistrict}
+        value={selectedSubDistrict}
+        onChange={(event, newValue) => {
+          setSelectedSubDistrict(newValue);
+          handleGetAreaResult(newValue);
+          console.log('Selected sub district:', newValue); // you can also call a handler here
+        }}
+        getOptionLabel={(option) => option.name}
+        isOptionEqualToValue={(option, value) => option.name === value?.name}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            value={selectedSubDistrict}
+            label="Search Sub Area..."
+            variant="outlined"
+          />
+        )}
+        renderOption={(props, option) => <li {...props}>{option.name}</li>}
       />
     </FormControl>
   );
@@ -415,9 +461,9 @@ export default function TourFilters({
   const renderHostFilter = (
     <FormControl fullWidth>
       <Autocomplete
-        // onChange={(event, newValue) => {
-        //   handleFilterService(newValue);
-        // }}
+        onChange={(event, newValue) => {
+          handleFilterService(newValue);
+        }}
         value={filters.host ? filters.host : null}
         fullWidth
         options={hosts}
@@ -468,6 +514,7 @@ export default function TourFilters({
         <Scrollbar sx={{ px: 2.5, py: 3 }}>
           <Stack spacing={3}>
             {renderAreaSearch}
+            {renderSubAreaSearch}
             {renderDateRange}
             {renderListingType}
             {renderStatus}

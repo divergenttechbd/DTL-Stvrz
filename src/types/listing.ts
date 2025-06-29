@@ -15,6 +15,8 @@ export type IListingFilters = {
   latitude: string;
   longitude: string;
   radius: number;
+  district: string;
+  sub_disctrict: string;
 };
 
 // ----------------------------------------------------------------------
