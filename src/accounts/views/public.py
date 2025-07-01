@@ -420,11 +420,15 @@ class PublicUserLoginDualAPIView(views.APIView):
 
 
                 counterpart_user.set_password(raw_password)
-                counterpart_user.save()
+                user_data = counterpart_user.save()
 
 
                 UserProfile.objects.create(user=counterpart_user, languages=[])
                 Wishlist.objects.create(user=counterpart_user)
+
+                user_info = UserSerializer(user_data).data
+                create_user(user_info)
+
 
                 print(f"SUCCESS: Created counterpart user '{counterpart_user.username}' successfully.")
 
