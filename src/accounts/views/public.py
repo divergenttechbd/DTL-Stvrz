@@ -453,7 +453,7 @@ class PublicUserLoginDualAPIView(views.APIView):
             username = f"{phone}_{u_type}"
             filter_params = {"username": username, "is_staff": False}
 
-        # Authenticate the user
+
         try:
             user = User.objects.get(**filter_params)
         except User.DoesNotExist:
@@ -467,7 +467,7 @@ class PublicUserLoginDualAPIView(views.APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Store the raw password for potential use, then check it
+
         raw_password = request.data["password"]
         if not user.check_password(raw_password=raw_password):
             return Response(
@@ -475,18 +475,15 @@ class PublicUserLoginDualAPIView(views.APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # --- START: Counterpart User Check and Creation Logic ---
-        # This logic only runs for non-staff users after a successful password check.
+
         if not user.is_staff:
             current_u_type = user.u_type
 
-            # Determine the type of the counterpart account
             other_u_type = UserTypeOption.GUEST if current_u_type == UserTypeOption.HOST else UserTypeOption.HOST
             other_username = f"{user.phone_number}_{other_u_type}"
 
-            # Perform a quick, efficient check to see if the counterpart account already exists
             if not User.objects.filter(username=other_username).exists():
-                # If it doesn't exist, call our helper method to create it
+
                 self._create_counterpart_user(
                     base_user=user,
                     counterpart_type=other_u_type,
@@ -498,10 +495,8 @@ class PublicUserLoginDualAPIView(views.APIView):
             "access_token": access_token,
             "refresh_token": refresh_token,
         }
-
-
         set_cache(
-            key=f"{user.username}_token_data",
+            key=f"{username}_token_data",
             value=json.dumps(
                 UserSerializer(
                     user, fields=["id", "username", "u_type", "phone_number"]
@@ -510,14 +505,14 @@ class PublicUserLoginDualAPIView(views.APIView):
             ttl=5 * 60 * 60,
         )
         cookie_data = generate_cookie_data("bearer " + data["access_token"])
+        print(cookie_data, " ---- c token ---")
         response.set_cookie(**cookie_data)
-
 
         response.data = {
             "Success": "Login successfully",
             "data": data,
+            "status": status.HTTP_201_CREATED,
         }
-        response.status_code = status.HTTP_200_OK
 
         return response
 
