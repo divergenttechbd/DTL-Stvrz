@@ -963,7 +963,7 @@ class PublicUserRegisterAPIViewHost(views.APIView):
         new_user.save(update_fields=['is_phone_verified', 'is_email_verified'])
 
         # Now we have a model instance, we can get its data for MongoDB
-        user_data = UserSerializer(new_user).data
+        user_data = HostGuestUserSerializer(new_user).data
         create_user(user_data)
 
         UserProfile.objects.create(user=new_user, languages=[])
