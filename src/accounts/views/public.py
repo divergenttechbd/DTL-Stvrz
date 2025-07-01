@@ -426,7 +426,7 @@ class PublicUserLoginDualAPIView(views.APIView):
                 UserProfile.objects.create(user=counterpart_user, languages=[])
                 Wishlist.objects.create(user=counterpart_user)
 
-                user_info = UserSerializer(counterpart_user).data
+                user_info = HostGuestUserSerializer(counterpart_user).data
                 create_user(user_info)
 
 
