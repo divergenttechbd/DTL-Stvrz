@@ -28,13 +28,268 @@ from src.modules.users.models import User
 from src.core.broadcaster import Broadcast
 from src.core.di import Container
 from src.modules.chat.service import ChatService
-
+import re
 
 # broadcast = Broadcast("redis://localhost:6379")
 broadcast = Broadcast("redis://192.168.7.172:6379")
 
 router = APIRouter(prefix="/user")
 
+EMAIL_REGEX = re.compile(
+    r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+)
+
+import re
+
+# Comprehensive email detection regex
+HEAVY_EMAIL_REGEX = re.compile(
+    r'''
+    (                           # Start of the non-capturing outer group
+        # Standard email format
+        \b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b |
+
+        # Email with spaces around @ and dots
+        [A-Za-z0-9._%+-]+\s*@\s*[A-Za-z0-9.-]+\s*\.\s*[A-Za-z]{2,} |
+
+        # Email with separators and obfuscation
+        [A-Za-z0-9._%+-]+[\s\-*#]*@[\s\-*#]*[A-Za-z0-9.-]+[\s\-*#]*\.[\s\-*#]*[A-Za-z]{2,} |
+
+        # Email with 'at' and optional 'dot'
+        [A-Za-z0-9._%+-]+\s*(?:at|AT)\s*[A-Za-z0-9.-]+\s*(?:dot|DOT|\.)?\s*[A-Za-z]{2,} |
+
+        # Email with [at] or (at) or {at} and [dot]
+        [A-Za-z0-9._%+-]+\s*[\(\[\{]?(?:at|AT)[\)\]\}]?\s*[A-Za-z0-9.-]+\s*[\(\[\{]?(?:dot  |DOT|\.)[\)\]\}]?\s*[A-Za-z]{2,} |
+        
+        [A-Za-z0-9._%+-]+\s*(?:@|@)\s*[A-Za-z0-9.\-]+\s*(?:.|.)\s*[A-Za-z]{2,} |
+
+        # Email with underscores/dashes around @ and .
+        [A-Za-z0-9._%+-]+\s*[_\-]*\s*@\s*[_\-]*\s*[A-Za-z0-9.-]+\s*[_\-]*\s*\.\s*[_\-]*\s*[A-Za-z]{2,} |
+
+        # Split emails
+        [A-Za-z0-9._%+-]+\s+@\s+[A-Za-z0-9.-]+\s+\.\s+[A-Za-z]{2,} |
+
+
+        # Partial pattern
+        [A-Za-z0-9._%+-]{3,}\s*@\s*[A-Za-z0-9.-]{3,}\s*\.\s*[A-Za-z]{2,}
+        
+       
+    )                       
+    ''',
+    re.VERBOSE | re.IGNORECASE
+)
+
+
+# Pattern for common text obfuscations
+EMAIL_OBFUSCATION_REGEX = re.compile(
+    r'''
+    (?:
+        # "at" variations
+        [A-Za-z0-9._%+-]+\s*(?:at|AT|@|＠)\s*[A-Za-z0-9.\-]+\s*(?:dot|DOT|\.)\s*(?:com|org|net|edu|gov|co|io|me|info|biz|uk|us|ca|au|de|fr|jp|in|bd|[a-z]{2,4})|
+
+        # Bracketed variations
+        [A-Za-z0-9._%+-]+\s*[\(\[\{]\s*(?:at|AT)\s*[\)\]\}]\s*[A-Za-z0-9.\-]+\s*[\(\[\{]\s*(?:dot|DOT)\s*[\)\]\}]\s*[A-Za-z]{2,4}|
+
+        # Spaced out emails
+        [A-Za-z0-9._%-]+\s+@\s+[A-Za-z0-9.\-]+\s+\.\s+[A-Za-z]{2,4}|
+
+        # Email with extra characters
+        [A-Za-z0-9._%+-]+[\*\#\s]*@[\*\#\s]*[A-Za-z0-9.\-]+[\*\#\s]*\.[\*\#\s]*[A-Za-z]{2,4}
+    )
+    ''',
+    re.VERBOSE | re.IGNORECASE
+)
+
+# Pattern for written/spelled out emails
+WRITTEN_EMAIL_REGEX = re.compile(
+    r'(?:email|e-mail|mail|contact)[\s\-:]*(?:is|address)?[\s\-:]*[A-Za-z0-9._%+-]+[\s\-]*(?:at|@)[\s\-]*[A-Za-z0-9.-]+[\s\-]*(?:dot|\.)[\s\-]*[A-Za-z]{2,4}',
+    re.IGNORECASE
+)
+
+# Common domain patterns that might be obfuscated
+DOMAIN_PATTERN_REGEX = re.compile(
+    r'[A-Za-z0-9._%+-]+\s*[@at]+\s*(?:gmail|yahoo|hotmail|outlook|protonmail|icloud|aol|live|msn)\s*(?:dot|\.)?\s*(?:com|org|net|co|uk|in|bd)',
+    re.IGNORECASE
+)
+
+
+
+SANITIZED_PHONE_REGEX = re.compile(
+    r'^(?:\+?88)?01[3-9]\d{8}$'
+)
+
+
+HEAVY_PHONE_REGEX = re.compile(
+    r'''
+    (?:
+        # Bangladesh numbers with country code variations
+        (?:\+?88[\s\-\.\(\)]*)?
+        (?:0?1[3-9][\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d)|
+
+        # International format variations
+        (?:\+[\s\-\.\(\)]*8[\s\-\.\(\)]*8[\s\-\.\(\)]*0?1[3-9][\s\-\.\(\)]*\d{8})|
+
+        # Any 11-digit sequence starting with 01[3-9]
+        (?:0?1[3-9][\s\-\.\(\)\*\#]*\d[\s\-\.\(\)\*\#]*\d[\s\-\.\(\)\*\#]*\d[\s\-\.\(\)\*\#]*\d[\s\-\.\(\)\*\#]*\d[\s\-\.\(\)\*\#]*\d[\s\-\.\(\)\*\#]*\d[\s\-\.\(\)\*\#]*\d)|
+
+        # Partial numbers that could be completed
+        (?:(?:\+?88[\s\-\.\(\)]*)?0?1[3-9][\s\-\.\(\)\*\#]*\d{6,8})|
+
+        # Obfuscated numbers (with letters replacing digits)
+        (?:(?:\+?88[\s\-\.\(\)]*)?0?1[3-9][\s\-\.\(\)OoIl]*[0-9OoIl][\s\-\.\(\)OoIl]*[0-9OoIl][\s\-\.\(\)OoIl]*[0-9OoIl][\s\-\.\(\)OoIl]*[0-9OoIl][\s\-\.\(\)OoIl]*[0-9OoIl][\s\-\.\(\)OoIl]*[0-9OoIl][\s\-\.\(\)OoIl]*[0-9OoIl][\s\-\.\(\)OoIl]*[0-9OoIl])|
+
+        # Written numbers (zero, one, two, etc.)
+        (?:(?:zero|oh)[\s\-]*(?:one)[\s\-]*(?:three|four|five|six|seven|eight|nine)(?:[\s\-]*(?:zero|one|two|three|four|five|six|seven|eight|nine)){8})|
+
+        # Common formats with extra characters
+        (?:(?:\+?88[\s\-\.\(\)]*)?[\(\[]?0?1[3-9][\)\]]?[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d)|
+
+        # Numbers with word boundaries
+        (?:\b(?:\+?88[\s\-\.\(\)]*)?0?1[3-9]\d{8}\b)|
+
+        # Reversed or scrambled patterns
+        (?:\d{8}[3-9]10?(?:88\+?)?)|
+
+        # Any sequence that looks like a BD mobile (more permissive)
+        (?:(?:\+?88)?[\s\-\.\(\)]*0?1[3456789][\s\-\.\(\)\*\#]*(?:\d[\s\-\.\(\)\*\#]*){8})
+    )
+    ''',
+    re.VERBOSE | re.IGNORECASE
+)
+
+
+NUMERIC_WORD_REGEX = re.compile(
+    r'(?:zero|one|two|three|four|five|six|seven|eight|nine|oh)(?:\s+(?:zero|one|two|three|four|five|six|seven|eight|nine|oh)){10,}',
+    re.IGNORECASE
+)
+
+
+SPACED_NUMBER_REGEX = re.compile(
+    r'(?:\+?88\s*)?0?\s*1\s*[3-9](?:\s*\d){8,}',
+    re.IGNORECASE
+)
+
+
+SEPARATOR_REGEX = re.compile(
+    r'(?:\+?88)?[^\w]*0?1[3-9](?:[^\w]*\d){8}',
+    re.IGNORECASE
+)
+
+def is_email_present(message: str) -> bool:
+    """
+    Comprehensive email detection function
+    Checks for emails in multiple formats and obfuscation attempts
+    """
+
+    # Primary heavy regex check
+    if HEAVY_EMAIL_REGEX.search(message):
+        return True
+
+    # Check for obfuscated emails
+    if EMAIL_OBFUSCATION_REGEX.search(message):
+        return True
+
+    # Check for written/spelled out emails
+    if WRITTEN_EMAIL_REGEX.search(message):
+        return True
+
+    # Check for common domain patterns
+    if DOMAIN_PATTERN_REGEX.search(message):
+        return True
+
+    # Normalize common substitutions and check again
+    normalized_message = message.replace('(at)', '@').replace('[at]', '@').replace('{at}', '@')
+    normalized_message = normalized_message.replace('(dot)', '.').replace('[dot]', '.').replace('{dot}', '.')
+    normalized_message = normalized_message.replace(' at ', '@').replace(' dot ', '.')
+    normalized_message = normalized_message.replace('＠', '@')  # Full-width @
+
+    if HEAVY_EMAIL_REGEX.search(normalized_message):
+        return True
+
+    # Check for emails with excessive spacing
+    spaced_removed = re.sub(r'\s+', '', message)
+    if re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', spaced_removed):
+        return True
+
+    # Check for partial email patterns that might be intentionally broken
+    partial_patterns = [
+        r'[A-Za-z0-9._%+-]{3,}@[A-Za-z0-9.-]{3,}',  # Missing TLD
+        r'[A-Za-z0-9._%+-]{3,}\s+@\s+[A-Za-z0-9.-]{3,}',  # Spaced @ but missing TLD
+        r'@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}',  # Missing username
+    ]
+
+    for pattern in partial_patterns:
+        if re.search(pattern, message, re.IGNORECASE):
+            return True
+
+    # Check for email-like patterns with common typos/obfuscations
+    typo_patterns = [
+        r'[A-Za-z0-9._%+-]+\s*[@＠]\s*g\s*m\s*a\s*i\s*l\s*[.\s]*c\s*o\s*m',  # spaced gmail
+        r'[A-Za-z0-9._%+-]+\s*[@＠]\s*y\s*a\s*h\s*o\s*o\s*[.\s]*c\s*o\s*m',  # spaced yahoo
+        r'[A-Za-z0-9._%+-]+\s*[@＠]\s*h\s*o\s*t\s*m\s*a\s*i\s*l\s*[.\s]*c\s*o\s*m',  # spaced hotmail
+    ]
+
+    for pattern in typo_patterns:
+        if re.search(pattern, message, re.IGNORECASE):
+            return True
+
+    return False
+
+
+def is_contact_info_present(message: str) -> bool:
+
+    if is_email_present(message):
+        return True
+
+    sanitized_message = re.sub(r'[^\d+]', '', message)
+    original_regex = re.compile(r'^(?:\+?88)?01[3-9]\d{8}$')
+    if original_regex.search(sanitized_message):
+        return True
+
+
+    if HEAVY_PHONE_REGEX.search(message):
+        return True
+
+
+    if NUMERIC_WORD_REGEX.search(message):
+        return True
+
+
+    if SPACED_NUMBER_REGEX.search(message):
+        return True
+
+
+    if SEPARATOR_REGEX.search(message):
+        return True
+
+
+    letter_substituted = message.replace('O', '0').replace('o', '0').replace('I', '1').replace('l', '1')
+    if HEAVY_PHONE_REGEX.search(letter_substituted):
+        return True
+
+
+    words = message.split()
+    concatenated = ''.join(re.findall(r'\d', ' '.join(words)))
+    if len(concatenated) >= 11 and re.match(r'(?:88)?01[3-9]\d{8}', concatenated):
+        return True
+
+
+    reversed_sanitized = sanitized_message[::-1]
+    if re.search(r'\d{8}[3-9]10(?:88)?', reversed_sanitized):
+        return True
+
+
+    partial_matches = re.findall(r'(?:\+?88)?0?1[3-9]\d{6,}', sanitized_message)
+    for match in partial_matches:
+        if len(re.sub(r'[^\d]', '', match)) >= 9:  # At least 9 digits
+            return True
+
+
+    digit_sequences = re.findall(r'\d{9,}', sanitized_message)
+    for seq in digit_sequences:
+        if re.search(r'(?:88)?01[3-9]\d{8}', seq):
+            return True
+
+    return False
 
 def custom_encoder(obj):
     if isinstance(obj, (ObjectId, PydanticObjectId)):
@@ -201,25 +456,6 @@ async def websocket_endpoint(
     if not has_access or not chat_room:
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
 
-    # await broadcast.publish(
-    #     channel=room_id,
-    #     message=json.dumps({"action": "join", "user": current_user.username}),
-    # )
-
-    # other_user_id = (
-    #     chat_room.from_user.id
-    #     if current_user.id == chat_room.to_user.id
-    #     else chat_room.to_user.id
-    # )
-
-    # await broadcast.publish(
-    #     channel=f"user_global_room_{other_user_id}",
-    #     message=json.dumps(
-    #         {"message": f"{current_user.username} join the chat"},
-    #         default=custom_encoder,
-    #     ),
-    # )
-
     async with anyio.create_task_group() as task_group:
 
         async def run_chatroom_ws_receiver() -> None:
@@ -258,6 +494,17 @@ async def chatroom_ws_receiver(
                 )
                 if body["action"] == "message":
                     # body["user"] = current_user.id
+
+                    user_message_content = body.get("message", "")
+                    if is_contact_info_present(user_message_content):
+                        error_payload = {
+                            "action": "error",
+                            "type": "forbidden_content",
+                            "detail": "Sharing contact information (email or phone number) is not allowed."
+                        }
+                        await websocket.send_text(json.dumps(error_payload))
+                        continue
+
                     if chat_room.status == RoomStatusEnum.CLOSED:
                         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
 
