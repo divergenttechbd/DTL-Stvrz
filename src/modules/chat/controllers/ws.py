@@ -39,9 +39,41 @@ EMAIL_REGEX = re.compile(
     r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
 )
 
-import re
+UUID_REGEX = re.compile(
+    r'\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b'
+)
 
-# Comprehensive email detection regex
+UUID_VARIANTS_REGEX = re.compile(
+    r'''
+    (?:
+        # Standard UUID format
+        \b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b|
+
+        # UUID without hyphens
+        \b[0-9a-fA-F]{32}\b|
+
+        # UUID with spaces instead of hyphens
+        \b[0-9a-fA-F]{8}\s[0-9a-fA-F]{4}\s[0-9a-fA-F]{4}\s[0-9a-fA-F]{4}\s[0-9a-fA-F]{12}\b|
+
+        # UUID with underscores
+        \b[0-9a-fA-F]{8}_[0-9a-fA-F]{4}_[0-9a-fA-F]{4}_[0-9a-fA-F]{4}_[0-9a-fA-F]{12}\b|
+
+        # UUID in curly braces
+        \{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}
+    )
+    ''',
+    re.VERBOSE | re.IGNORECASE
+)
+
+
+def remove_uuids_from_message(message: str) -> str:
+
+    cleaned_message = UUID_REGEX.sub('', message)
+    cleaned_message = UUID_VARIANTS_REGEX.sub('', cleaned_message)
+
+    return cleaned_message
+
+
 HEAVY_EMAIL_REGEX = re.compile(
     r'''
     (                           # Start of the non-capturing outer group
@@ -117,7 +149,6 @@ SANITIZED_PHONE_REGEX = re.compile(
     r'^(?:\+?88)?01[3-9]\d{8}$'
 )
 
-
 HEAVY_PHONE_REGEX = re.compile(
     r'''
     (?:
@@ -134,20 +165,11 @@ HEAVY_PHONE_REGEX = re.compile(
         # Partial numbers that could be completed
         (?:(?:\+?88[\s\-\.\(\)]*)?0?1[3-9][\s\-\.\(\)\*\#]*\d{6,8})|
 
-        # Obfuscated numbers (with letters replacing digits)
-        (?:(?:\+?88[\s\-\.\(\)]*)?0?1[3-9][\s\-\.\(\)OoIl]*[0-9OoIl][\s\-\.\(\)OoIl]*[0-9OoIl][\s\-\.\(\)OoIl]*[0-9OoIl][\s\-\.\(\)OoIl]*[0-9OoIl][\s\-\.\(\)OoIl]*[0-9OoIl][\s\-\.\(\)OoIl]*[0-9OoIl][\s\-\.\(\)OoIl]*[0-9OoIl][\s\-\.\(\)OoIl]*[0-9OoIl])|
-
-        # Written numbers (zero, one, two, etc.)
-        (?:(?:zero|oh)[\s\-]*(?:one)[\s\-]*(?:three|four|five|six|seven|eight|nine)(?:[\s\-]*(?:zero|one|two|three|four|five|six|seven|eight|nine)){8})|
-
         # Common formats with extra characters
         (?:(?:\+?88[\s\-\.\(\)]*)?[\(\[]?0?1[3-9][\)\]]?[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d)|
 
         # Numbers with word boundaries
         (?:\b(?:\+?88[\s\-\.\(\)]*)?0?1[3-9]\d{8}\b)|
-
-        # Reversed or scrambled patterns
-        (?:\d{8}[3-9]10?(?:88\+?)?)|
 
         # Any sequence that looks like a BD mobile (more permissive)
         (?:(?:\+?88)?[\s\-\.\(\)]*0?1[3456789][\s\-\.\(\)\*\#]*(?:\d[\s\-\.\(\)\*\#]*){8})
@@ -173,6 +195,34 @@ SEPARATOR_REGEX = re.compile(
     r'(?:\+?88)?[^\w]*0?1[3-9](?:[^\w]*\d){8}',
     re.IGNORECASE
 )
+
+
+def is_phone_number_present(message: str) -> bool:
+    """
+    Check for phone numbers while excluding UUIDs
+    """
+    # Remove UUIDs first to prevent false positives
+    cleaned_message = remove_uuids_from_message(message)
+
+    # Original sanitized check
+    sanitized_message = re.sub(r'[^\d+]', '', cleaned_message)
+    original_regex = re.compile(r'^(?:\+?88)?01[3-9]\d{8}$')
+    if original_regex.search(sanitized_message):
+        return True
+
+    # Heavy regex check on cleaned message
+    if HEAVY_PHONE_REGEX.search(cleaned_message):
+        return True
+
+    # Additional phone detection logic (simplified)
+    # Check for numbers split across words
+    words = cleaned_message.split()
+    concatenated = ''.join(re.findall(r'\d', ' '.join(words)))
+    if len(concatenated) >= 11 and re.match(r'(?:88)?01[3-9]\d{8}', concatenated):
+        return True
+
+    return False
+
 
 def is_email_present(message: str) -> bool:
     """
@@ -237,57 +287,15 @@ def is_email_present(message: str) -> bool:
 
 def is_contact_info_present(message: str) -> bool:
 
+    message_without_uuids = remove_uuids_from_message(message).strip()
+    if not message_without_uuids:
+        return False
+
     if is_email_present(message):
         return True
 
-    sanitized_message = re.sub(r'[^\d+]', '', message)
-    original_regex = re.compile(r'^(?:\+?88)?01[3-9]\d{8}$')
-    if original_regex.search(sanitized_message):
+    if is_phone_number_present(message):
         return True
-
-
-    if HEAVY_PHONE_REGEX.search(message):
-        return True
-
-
-    if NUMERIC_WORD_REGEX.search(message):
-        return True
-
-
-    if SPACED_NUMBER_REGEX.search(message):
-        return True
-
-
-    if SEPARATOR_REGEX.search(message):
-        return True
-
-
-    letter_substituted = message.replace('O', '0').replace('o', '0').replace('I', '1').replace('l', '1')
-    if HEAVY_PHONE_REGEX.search(letter_substituted):
-        return True
-
-
-    words = message.split()
-    concatenated = ''.join(re.findall(r'\d', ' '.join(words)))
-    if len(concatenated) >= 11 and re.match(r'(?:88)?01[3-9]\d{8}', concatenated):
-        return True
-
-
-    reversed_sanitized = sanitized_message[::-1]
-    if re.search(r'\d{8}[3-9]10(?:88)?', reversed_sanitized):
-        return True
-
-
-    partial_matches = re.findall(r'(?:\+?88)?0?1[3-9]\d{6,}', sanitized_message)
-    for match in partial_matches:
-        if len(re.sub(r'[^\d]', '', match)) >= 9:  # At least 9 digits
-            return True
-
-
-    digit_sequences = re.findall(r'\d{9,}', sanitized_message)
-    for seq in digit_sequences:
-        if re.search(r'(?:88)?01[3-9]\d{8}', seq):
-            return True
 
     return False
 
