@@ -86,7 +86,7 @@ def handle_booking_updates(sender, instance: Booking, created: bool, **kwargs):
 
         instance._pre_arrival_scheduled_signal = True
 
-    # --- Section 2: Mark Applied Coupon as Used ---
+
     if instance.status == BookingStatusOption.CONFIRMED and \
         instance.applied_coupon_code and \
         not getattr(instance, '_coupon_usage_processed_signal', False):  # Idempotency for coupon part
@@ -119,23 +119,39 @@ def handle_booking_updates(sender, instance: Booking, created: bool, **kwargs):
                     id=instance.applied_admin_coupon_id)
                 # Double check validity before incrementing (though is_valid was checked before applying)
                 if admin_coupon.is_active and admin_coupon.uses_count < admin_coupon.max_use:
-                    admin_coupon.uses_count = F('uses_count') + 1
-                    # Check if this usage will exhaust the coupon
-                    # Note: F object doesn't resolve immediately for comparison here.
-                    # So, we check against max_uses. If uses_count + 1 will be >= max_uses, deactivate.
-                    if (admin_coupon.uses_count + 1) >= admin_coupon.max_use:  # The F() will add 1
+
+                    AdminConfiguredCoupon.objects.filter(pk=admin_coupon.pk).update(uses_count=F('uses_count') + 1)
+
+                    # 2. Refresh the local Python instance to get the new value from the database
+                    admin_coupon.refresh_from_db()
+
+                    # 3. Now, check if the coupon should be deactivated based on the NEW usage count
+                    if admin_coupon.uses_count >= admin_coupon.max_use:
                         admin_coupon.is_active = False
-                    admin_coupon.save(update_fields=['uses_count', 'is_active', 'updated_at'])
+                        # A simple .save() is fine here as we are not using F() objects
+                        admin_coupon.save(update_fields=['is_active', 'updated_at'])
+
                     print(
-                        f"Signal: Admin coupon {admin_coupon.code} usage count incremented for booking {instance.invoice_no}. New count will be {admin_coupon.uses_count + 1}.")
+                        f"Signal: Admin coupon {admin_coupon.code} usage count incremented for booking {instance.invoice_no}. New count is {admin_coupon.uses_count}."
+                    )
                 else:
                     print(
                         f"Signal: Admin coupon {admin_coupon.code} was not active or limit reached for booking {instance.invoice_no} when trying to mark used.")
+
+
             except AdminConfiguredCoupon.DoesNotExist:
+
                 print(
+
                     f"Error in Signal: Applied admin coupon ID {instance.applied_admin_coupon_id} not found for booking {instance.invoice_no}.")
+
             except Exception as e:
+
+                # IMPORTANT: Re-raising the exception is better to ensure the transaction rolls back
+
                 print(f"Error incrementing admin coupon usage for booking {instance.invoice_no}: {e}")
+
+                raise  # This will cause the atomic transaction to fail and roll back, which is safer.
 
         instance._coupon_usage_processed_signal = True
 
