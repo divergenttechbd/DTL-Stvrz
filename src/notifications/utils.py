@@ -2,9 +2,22 @@ from base.type_choices import NotificationEventTypeOption, NotificationTypeOptio
 from notifications.models import Notification
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
+from .tasks import send_fcm_push_notification_task
 
+import firebase_admin
+from firebase_admin import credentials, messaging
+from django.conf import settings
+from django.contrib.auth import get_user_model
+
+# Your other utility functions (create_notification, etc.) are here
+from .models import FCMToken
+from base.cache.redis_cache import get_cache # Or wherever get_cache is
+
+User = get_user_model()
 
 def send_notification(notification_data: list):
+
+    print( " ------------------------- send notification -----------------------")
     for item in notification_data:
         channel_layer = get_channel_layer()
         if item.get("user_id"):
@@ -24,6 +37,26 @@ def send_notification(notification_data: list):
             },
         )
 
+        print(" ----------- fcm -----------")
+        if item.get("user_id"):
+            user_id = item.get("user_id")
+            title = "You have a new notification!"
+            body = item["data"]["message"]
+
+
+            payload_data = {
+                "url": item["data"].get("link", "/"),
+                "identifier": item["data"].get("identifier", "")
+            }
+
+            print(f"Dispatching FCM push task for user_id: {user_id}")
+            send_fcm_push_directly(
+                user_id=user_id,
+                title=title,
+                body=body,
+                data=payload_data
+            )
+
 
 def create_notification(
     event_type: NotificationEventTypeOption,
@@ -40,3 +73,44 @@ def create_notification(
         data["user_id"] = user_id
 
     return data
+
+
+
+
+def send_fcm_push_directly(user_id, title, body, data=None):
+    """
+    Sends a single FCM Push Notification directly (synchronously).
+    WARNING: This will block the request until the notification is sent.
+    """
+    print(f"--- Attempting to send FCM directly to user_id: {user_id} ---")
+    try:
+        user = User.objects.get(id=user_id)
+        fcm_record = FCMToken.objects.filter(user=user).first()
+
+        if not fcm_record or not fcm_record.token:
+            print(f"Direct FCM: No token found for user_id {user_id}.")
+            return
+
+        # Optional: You can still check if the user is on mobile
+        # if not get_cache(key=f"user_mobile_logged_in_{user.username}"):
+        #     print(f"Direct FCM: User {user.username} not on mobile. Skipping.")
+        #     return
+
+        message = messaging.Message(
+            notification=messaging.Notification(title=title, body=body),
+            data=data if data else {},
+            token=fcm_record.token,
+        )
+
+        response = messaging.send(message)
+        print(f"Direct FCM: Successfully sent notification to {user.username}: {response}")
+
+    except User.DoesNotExist:
+        print(f"Direct FCM: User with id {user_id} does not exist.")
+    except messaging.UnregisteredError:
+        print(f"Direct FCM: Token for user {user_id} is unregistered. Deleting.")
+        if 'fcm_record' in locals():
+            fcm_record.delete()
+    except Exception as e:
+        # It's important to catch all exceptions to prevent the view from crashing.
+        print(f"Direct FCM: An unexpected error occurred for user_id {user_id}: {e}")

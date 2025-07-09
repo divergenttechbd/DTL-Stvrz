@@ -17,7 +17,7 @@ def send_fcm_notification(device_token, title, body, data=None):
     if data:
         message.data = data
     response = messaging.send(message)
-    print("Successfully sent notification:", response)
+    print("Successfully sent notification: ------------firebase", response)
 
 
 def send_fcm_notification_without_task(device_token, title, body, data=None):
@@ -27,4 +27,4 @@ def send_fcm_notification_without_task(device_token, title, body, data=None):
     if data:
         message.data = data
     response = messaging.send(message)
-    print("Successfully sent notification:", response)
+    print("Successfully sent notification: -------------firebase", response)

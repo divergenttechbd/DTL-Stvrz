@@ -66,6 +66,7 @@ class GuestBookingListCreateAPIView(ListCreateAPIView):
 
     @method_decorator(exception_handler)
     def create(self, request, *args, **kwargs):
+        print(request.user)
         processed_data = GuestBookingProcess()(request.data, request.user)
 
         if processed_data["status"] != 200:

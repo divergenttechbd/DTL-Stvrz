@@ -27,7 +27,9 @@ class IsHostUser(BasePermission):
 
 
 class IsGuestUser(BasePermission):
+
     def has_permission(self, request, view):
+        print(request.user)
         return (
             not request.user.is_staff
             and request.user.u_type == UserTypeOption.GUEST
