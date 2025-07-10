@@ -349,4 +349,11 @@ celery =============
     - nohup celery -A myproject.settings.celery worker -l info > ../logs/celery-worker.log 2>&1 &
     - nohup celery -A myproject.settings.celery beat -l info > ../logs/celery-beat.log 2>&1 &
 
+    - tail -f /var/www/html/stayverz/DTL-Stayverz/logs/celery-worker.log
+    - tail -f /var/www/html/stayverz/DTL-Stayverz/logs/celery-beat.log
+
+
+
+
+
 

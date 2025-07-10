@@ -153,9 +153,7 @@ def booking_confirmed_process(booking_id: str) -> None:
         print(" --------------- send pre --------------")
 
         host_device_token = FCMToken.objects.filter(user_id=booking.host_id).first()
-        if host_device_token and get_cache(
-            key=f"user_mobile_logged_in_{booking.host.username}"
-        ):
+        if host_device_token :
             title = "Booking Message"
             body = f"Congratulations ! A guest booked your property just now"
             data = {
@@ -167,9 +165,7 @@ def booking_confirmed_process(booking_id: str) -> None:
             )
 
         guest_device_token = FCMToken.objects.filter(user_id=booking.guest_id).first()
-        if guest_device_token and get_cache(
-            key=f"user_mobile_logged_in_{booking.guest.username}"
-        ):
+        if guest_device_token :
             title = "Booking Message"
             body = f"Congratulations ! You’ve successfully completed your booking"
             data = {

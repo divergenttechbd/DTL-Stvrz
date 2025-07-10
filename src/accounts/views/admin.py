@@ -368,7 +368,7 @@ class AdminUserRetrieveUpdateAPIView(APIView):
             send_notification(notification_data=notifications_to_create)
 
             host_device_token = FCMToken.objects.filter(user_id=user.id).first()
-            if host_device_token and get_cache(key=f"user_mobile_logged_in_{user.username}"):
+            if host_device_token:
                 send_fcm_notification.delay(
                     token=host_device_token.token,
                     title="Account Update",
