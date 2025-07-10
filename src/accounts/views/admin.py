@@ -286,7 +286,7 @@ class AdminUserRetrieveUpdateAPIView(APIView):
         user_status_changed = new_user_status and new_user_status != user.status
         identity_status_changed = new_identity_status and new_identity_status != user.identity_verification_status
 
-        # Proceed only if a status relevant to notification has changed
+        print(user_status_changed, identity_status_changed, new_user_status, new_identity_status, " --------- ")
         if not user_status_changed and not identity_status_changed:
 
             pass
@@ -327,6 +327,7 @@ class AdminUserRetrieveUpdateAPIView(APIView):
 
 
         notifications_to_create = []
+        print(" ----- final_user_message ", final_user_message)
         if final_user_message:
 
             user_notification_payload = create_notification(
@@ -364,10 +365,11 @@ class AdminUserRetrieveUpdateAPIView(APIView):
 
 
         if notifications_to_create:
-
+            print(" ------- A -----------")
             send_notification(notification_data=notifications_to_create)
 
             host_device_token = FCMToken.objects.filter(user_id=user.id).first()
+            print(" ---------- fcm -----------")
             if host_device_token:
                 send_fcm_notification.delay(
                     device_token=host_device_token.token,
