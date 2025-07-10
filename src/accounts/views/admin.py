@@ -370,7 +370,7 @@ class AdminUserRetrieveUpdateAPIView(APIView):
             host_device_token = FCMToken.objects.filter(user_id=user.id).first()
             if host_device_token:
                 send_fcm_notification.delay(
-                    token=host_device_token.token,
+                    device_token=host_device_token.token,
                     title="Account Update",
                     body=final_user_message,
                     data={"url": "/user/profile"}
