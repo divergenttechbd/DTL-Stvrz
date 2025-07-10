@@ -37,25 +37,25 @@ def send_notification(notification_data: list):
             },
         )
 
-        print(" ----------- fcm -----------")
-        if item.get("user_id"):
-            user_id = item.get("user_id")
-            title = "You have a new notification!"
-            body = item["data"]["message"]
-
-
-            payload_data = {
-                "url": item["data"].get("link", "/"),
-                "identifier": item["data"].get("identifier", "")
-            }
-
-            print(f"Dispatching FCM push task for user_id: {user_id}")
-            send_fcm_push_directly(
-                user_id=user_id,
-                title=title,
-                body=body,
-                data=payload_data
-            )
+        # print(" ----------- fcm -----------")
+        # if item.get("user_id"):
+        #     user_id = item.get("user_id")
+        #     title = "You have a new notification!"
+        #     body = item["data"]["message"]
+        #
+        #
+        #     payload_data = {
+        #         "url": item["data"].get("link", "/"),
+        #         "identifier": item["data"].get("identifier", "")
+        #     }
+        #
+        #     print(f"Dispatching FCM push task for user_id: {user_id}")
+        #     send_fcm_push_directly(
+        #         user_id=user_id,
+        #         title=title,
+        #         body=body,
+        #         data=payload_data
+        #     )
 
 
 def create_notification(
@@ -78,10 +78,7 @@ def create_notification(
 
 
 def send_fcm_push_directly(user_id, title, body, data=None):
-    """
-    Sends a single FCM Push Notification directly (synchronously).
-    WARNING: This will block the request until the notification is sent.
-    """
+
     print(f"--- Attempting to send FCM directly to user_id: {user_id} ---")
     try:
         user = User.objects.get(id=user_id)
@@ -91,15 +88,19 @@ def send_fcm_push_directly(user_id, title, body, data=None):
             print(f"Direct FCM: No token found for user_id {user_id}.")
             return
 
-        # Optional: You can still check if the user is on mobile
-        # if not get_cache(key=f"user_mobile_logged_in_{user.username}"):
-        #     print(f"Direct FCM: User {user.username} not on mobile. Skipping.")
-        #     return
+        android_config = messaging.AndroidConfig(
+            priority='high'
+        )
+        apns_config = messaging.APNSConfig(
+            headers={'apns-priority': '10'}
+        )
 
         message = messaging.Message(
             notification=messaging.Notification(title=title, body=body),
             data=data if data else {},
             token=fcm_record.token,
+            android=android_config,
+            apns=apns_config,
         )
 
         response = messaging.send(message)
@@ -112,5 +113,4 @@ def send_fcm_push_directly(user_id, title, body, data=None):
         if 'fcm_record' in locals():
             fcm_record.delete()
     except Exception as e:
-        # It's important to catch all exceptions to prevent the view from crashing.
         print(f"Direct FCM: An unexpected error occurred for user_id {user_id}: {e}")

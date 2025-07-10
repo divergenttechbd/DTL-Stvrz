@@ -282,7 +282,7 @@ class CustomerSSLCommerzIPNView(views.APIView):
                     username=host.phone_number,
                     message="Congratulations ! A guest booked your property just now",
                 )
-                booking_confirmed_process.delay(booking_id=booking.id)  # delay
+                booking_confirmed_process.delay(booking_id=booking.id)
 
             return Response(
                 {"message": "Payment request received"}, status=status.HTTP_201_CREATED

@@ -1,3 +1,5 @@
+import os
+
 from myproject.settings import DEBUG, REDIS_HOST
 from corsheaders.defaults import default_headers
 
@@ -83,7 +85,7 @@ CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [("127.0.0.1", 6379)],
+            "hosts": [("192.168.7.172", 6379)],
         },
     },
 }
@@ -93,7 +95,7 @@ CACHE_MIDDLEWARE_SECONDS = 300
 
 # celery
 CELERY_BROKER_URL = REDIS_HOST
-CELERY_RESULT_BACKEND = None  # REDIS_HOST
+CELERY_RESULT_BACKEND =  os.getenv("REDIS_HOST", "redis://localhost:6379/0")  # REDIS_HOST
 CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
