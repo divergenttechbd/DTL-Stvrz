@@ -43,6 +43,9 @@ export type IBookingItem = {
   adult_count: number;
   guest_count: number;
   price: number;
+  applied_coupon_code: string;
+  applied_coupon_type: string;
+  discount_amount_applied: string;
   total_profit: number;
   guest_service_charge: number;
   total_price: number;

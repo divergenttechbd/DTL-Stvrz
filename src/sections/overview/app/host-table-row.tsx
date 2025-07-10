@@ -21,7 +21,7 @@ export default function HostTableRow({ row }: Props) {
           {first_name} {last_name}
         </Link>
       </TableCell>
-      {/* <TableCell sx={{ whiteSpace: 'nowrap' }}>{total_property}</TableCell> */}
+      <TableCell sx={{ whiteSpace: 'nowrap' }}>{total_property}</TableCell>
       <TableCell sx={{ whiteSpace: 'nowrap' }}>৳ {total_sell_amount?.toFixed(2)}</TableCell>
     </TableRow>
   );

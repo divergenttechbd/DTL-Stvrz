@@ -36,7 +36,7 @@ import {
 import { getBookings, cancelBooking } from 'src/utils/queries/bookings';
 // types
 import { IBookingTableFilters, IBookingTableFilterValue } from 'src/types/booking';
-import {} from 'src/types/user';
+import { } from 'src/types/user';
 //
 import BookingTableFiltersResult from '../booking-table-filters-result';
 import BookingTableRow from '../booking-table-row';
@@ -61,7 +61,8 @@ const TABLE_HEAD = [
   { id: 'listing', label: 'Listing', width: 250 },
   { id: 'confirmation_code', label: 'Confirmation Code', width: 100 },
   { id: 'paid_amount', label: 'Guest Paid', width: 100 },
-  { id: '', label: 'Review Details', width: 100 },
+  { id: '', label: 'Guest Review', width: 100 },
+  { id: '', label: 'Host Review', width: 100 },
   { id: '', label: 'Action', width: 88 },
 ];
 const defaultFilters: IBookingTableFilters = {
@@ -130,7 +131,7 @@ export default function BookingListView({
   const getBookingList = useCallback(async (data: any) => {
     try {
       const res = await getBookings(data);
-      if (!res.success) throw res.data;
+      if(!res.success) throw res.data;
       setTableData(res.data);
       setTableMeta({
         ...res.meta_data,
@@ -142,7 +143,7 @@ export default function BookingListView({
             res.event_stats.upcoming_count,
         },
       });
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   }, []);
@@ -172,7 +173,7 @@ export default function BookingListView({
         invoice: invoiceNo,
         cancellation_reason: 'Canceled by Admin',
       });
-      if (!res.success) throw res.data;
+      if(!res.success) throw res.data;
       // console.log(id);
       getBookingList({
         bookings: true,
@@ -180,7 +181,7 @@ export default function BookingListView({
         page_size: table.rowsPerPage,
         search: filters.search,
       });
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   };
@@ -189,7 +190,7 @@ export default function BookingListView({
   const handleExport = async () => {
     try {
       const res = await getBookings({ bookings: true, page: 1, page_size: 100000000 });
-      if (!res.success) throw res.data;
+      if(!res.success) throw res.data;
       const reportData = res.data;
       const dataForExport = reportData?.map((entry: any) => ({
         'Guest Name': entry?.guest?.full_name,
@@ -210,7 +211,7 @@ export default function BookingListView({
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Booking List Report');
       const today = new Date().toISOString().split('T')[0];
       XLSX.writeFile(workbook, `booking_list_report_${today}.xlsx`);
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   };
@@ -336,8 +337,8 @@ export default function BookingListView({
                       row={row}
                       selected={table.selected.includes(row.id)}
                       onSelectRow={() => table.onSelectRow(row.id)}
-                      onDeleteRow={() => {}}
-                      onEditRow={() => {}}
+                      onDeleteRow={() => { }}
+                      onEditRow={() => { }}
                       onCancel={() => {
                         handleCancel(row.guest.id, row.invoice_no);
                       }}

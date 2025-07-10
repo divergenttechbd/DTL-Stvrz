@@ -2,6 +2,8 @@
 import Container from '@mui/material/Container'
 import Tab from '@mui/material/Tab'
 import Tabs from '@mui/material/Tabs'
+import Stack from '@mui/material/Stack';
+import Button from '@mui/material/Button'
 // routes
 import { paths } from 'src/routes/paths'
 // _mock
@@ -9,6 +11,7 @@ import CustomBreadcrumbs from 'src/components/custom-breadcrumbs'
 import { useSettingsContext } from 'src/components/settings'
 //
 import { useCallback, useEffect, useState } from 'react'
+import { RouterLink } from 'src/routes/components'
 import Iconify from 'src/components/iconify'
 import { useTabs } from 'src/hooks/use-tabs'
 import { BookingListView } from 'src/sections/booking/view'
@@ -35,16 +38,16 @@ export default function UserEditView({ id }: Props) {
   const getUserDetails = useCallback(async () => {
     try {
       const res = await getUser(id);
-      if (!res.success) throw res.data;
+      if(!res.success) throw res.data;
       setCurrentUser(res.data);
       setUserType(res.data?.u_type)
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   }, [id]);
 
   useEffect(() => {
-    if (id) {
+    if(id) {
       getUserDetails();
     }
   }, [getUserDetails, id]);
@@ -76,7 +79,7 @@ export default function UserEditView({ id }: Props) {
       value: 'payouts',
       label: 'Payouts',
       icon: <Iconify icon="tdesign:undertake-transaction" width={24} />,
-    },    
+    },
     {
       value: 'payment-methods',
       label: 'Payment Methods',
@@ -86,6 +89,15 @@ export default function UserEditView({ id }: Props) {
 
   return (
     <Container maxWidth={settings.themeStretch ? false : 'lg'}>
+      <Button
+        component={RouterLink}
+        href={paths.dashboard.user.list}
+        startIcon={<Iconify icon="eva:arrow-ios-back-fill" width={16} />}
+        sx={{ mb: 2 }}
+      >
+        Back
+      </Button>
+
       <CustomBreadcrumbs
         heading="Edit"
         links={[
@@ -106,11 +118,11 @@ export default function UserEditView({ id }: Props) {
 
       <Tabs value={tabs.value} onChange={tabs.onChange} sx={{ mb: { xs: 3, md: 5 } }}>
         {TABS.map((tab) => {
-          if(userType === 'guest' && (tab.value === 'payouts' || tab.value === 'payment-methods' || tab.value === 'listings')){   
-            return ''         
-          } 
+          if(userType === 'guest' && (tab.value === 'payouts' || tab.value === 'payment-methods' || tab.value === 'listings')) {
+            return ''
+          }
           return <Tab key={tab.value} label={tab.label} icon={tab.icon} value={tab.value} />
-          
+
         })}
       </Tabs>
 
@@ -118,16 +130,16 @@ export default function UserEditView({ id }: Props) {
         <UserNewEditForm currentUser={currentUser} getUserDetails={getUserDetails} />
       )}
       {tabs.value === 'listings' && (
-        <TourListView 
-          fromUserDetails 
+        <TourListView
+          fromUserDetails
           userId={Number(id)}
         />
       )}
       {tabs.value === 'bookings' && (
-        <BookingListView 
-          fromUserDetails 
-          userType={userType} 
-          userId={Number(id)} 
+        <BookingListView
+          fromUserDetails
+          userType={userType}
+          userId={Number(id)}
         />
       )}
       {tabs.value === 'reviews' && (
@@ -144,7 +156,7 @@ export default function UserEditView({ id }: Props) {
         />
       )}
       {tabs.value === 'payment-methods' && (
-        <HostPaymentMethods id={Number(id)}/>
+        <HostPaymentMethods id={Number(id)} />
       )}
     </Container>
   );

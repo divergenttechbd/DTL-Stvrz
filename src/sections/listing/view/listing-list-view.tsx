@@ -82,13 +82,13 @@ export default function TourListView({ fromUserDetails, userId }: ListingsListVi
   const getListingList = useCallback(async (data: any) => {
     try {
       const res = await getListings(data);
-      if (!res.success) throw res.data;
+      if(!res.success) throw res.data;
       setListData(res.data);
       setListMeta(res.meta_data);
 
       const categories = await getListingCategories();
       setCategoryOptions(categories.data.map((d: any) => ({ label: d.name, value: d.id })));
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   }, []);
@@ -148,7 +148,7 @@ export default function TourListView({ fromUserDetails, userId }: ListingsListVi
       query: inputValue,
     }));
 
-    if (inputValue) {
+    if(inputValue) {
       const results = await getListingsLite({ search: inputValue });
 
       setSearch((prevState) => ({
@@ -212,21 +212,17 @@ export default function TourListView({ fromUserDetails, userId }: ListingsListVi
   // Excel export function
   const handleExport = async () => {
     try {
-      // const res = await getListings({ bookings: true, page: 1, page_size: 100000000 });
-      // if (!res.success) throw res.data;
-      // const reportData = res.data;
+      const res = await getListings({ bookings: true, page: 1, page_size: 100000000 });
+      if(!res.success) throw res.data;
+      const reportData = res.data;
       const dataForExport = listData?.map((entry: any) => ({
-        'Guest Name': entry?.guest?.full_name,
-        'Guest Phone Number': entry?.guest?.phone_number,
-        'Host Name': entry?.host?.full_name,
-        'Host Phone Number': entry?.host?.phone_number,
-        'Check-In': entry?.check_in,
-        'Check-Out': entry?.check_out,
-        'Booking Date & Time': entry?.created_at,
-        Listing: entry?.listing?.title,
-        'Confirmation Code': entry?.reservation_code,
-        'Guest Paid': entry?.paid_amount,
-        'Review Details': entry?.reviews[0]?.rating,
+        Title: entry?.title,
+        Address: entry?.address,
+        Price: entry?.price,
+        Host: entry?.owner?.full_name,
+        "Total Bookings": entry?.total_booking_count,
+        Status: entry?.status,
+        Rating: entry?.avg_rating,
       }));
 
       const worksheet = XLSX.utils.json_to_sheet(dataForExport);
@@ -234,7 +230,7 @@ export default function TourListView({ fromUserDetails, userId }: ListingsListVi
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Booking List Report');
       const today = new Date().toISOString().split('T')[0];
       XLSX.writeFile(workbook, `booking_list_report_${today}.xlsx`);
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   };

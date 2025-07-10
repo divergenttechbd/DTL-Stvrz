@@ -48,14 +48,14 @@ import { IReferalTableFilters } from '../../../types/referral';
 
 const TABLE_HEAD = [
   { id: 'full_name ', label: 'Full Name' },
-  { id: 'username', label: 'User' },
-  { id: 'total_host_referrals_made', label: 'Host Referrals Made', width: 150 },
+  { id: 'u_type', label: 'Role' },
+  // { id: 'total_host_referrals_made', label: 'Host Referrals Made', width: 150 },
   { id: 'total_host_referrals_successful', label: 'Successful Host Referrals', width: 150 },
   { id: 'total_host_referral_earnings', label: 'Host Referral Earnings', width: 150 },
-  { id: 'total_guest_referrals_made', label: 'Guest Referrals Made', width: 150 },
+  // { id: 'total_guest_referrals_made', label: 'Guest Referrals Made', width: 150 },
   { id: 'total_guest_referrals_successful', label: 'Successful Guest Referrals', width: 150 },
   { id: 'total_guest_referral_points', label: 'Guest Referral Points', width: 150 },
-  { id: '', label: 'Action', width: 88 },
+  // { id: '', label: 'Action', width: 88 },
 ];
 
 const defaultFilters: any = {
@@ -131,11 +131,11 @@ export default function ReferralListView() {
       const dataForExport = reportData?.map((entry: any) => ({
         'Full Name': entry?.full_name,
         Email: entry?.email,
-        User: entry?.username,
-        'Host Referrals Made': entry?.total_host_referrals_made,
+        Role: entry?.u_type,
+        // 'Host Referrals Made': entry?.total_host_referrals_made,
         'Successfu Host Referrals': entry?.total_host_referrals_successful,
         'Host Referral Earnings': entry?.total_host_referral_earnings,
-        'Guest Referrals Made': entry?.total_guest_referrals_made,
+        // 'Guest Referrals Made': entry?.total_guest_referrals_made,
         'Successfu Guest Referrals': entry?.total_guest_referrals_successful,
         'Guest Referrals Points': entry?.total_guest_referral_points,
       }));

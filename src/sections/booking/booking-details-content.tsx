@@ -4,6 +4,7 @@ import Stack from '@mui/material/Stack';
 import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
 import ListItemText from '@mui/material/ListItemText';
+import IconButton from '@mui/material/IconButton';
 import Switch from '@mui/material/Switch'
 // utils
 import { IBookingItem } from 'src/types/booking';
@@ -40,6 +41,9 @@ export default function BookingDetailsContent({ booking }: Props) {
     reservation_code,
     guest_service_charge,
     host_service_charge,
+    applied_coupon_code,
+    applied_coupon_type,
+    discount_amount_applied,
   } = booking;
 
   console.log('booking', booking);
@@ -220,6 +224,22 @@ export default function BookingDetailsContent({ booking }: Props) {
             <Stack
               direction="row"
               justifyContent="space-between"
+            >
+              <Typography>
+                Applied Coupon {applied_coupon_code ? `(${applied_coupon_code})` : ''}
+                {applied_coupon_type ?
+                  <Tooltip title={`Coupon Type: ${applied_coupon_type}`} placement="top">
+                    <IconButton color="primary">
+                      <Iconify sx={{ transform: "rotate(180deg)" }} icon="mdi:exclamation" />
+                    </IconButton>
+                  </Tooltip> : ''}
+              </Typography>
+
+              <Typography>৳{getDecimalValue(Number(discount_amount_applied))}</Typography>
+            </Stack>
+            <Stack
+              direction="row"
+              justifyContent="space-between"
               sx={{ borderBottom: 1, paddingBottom: 2 }}
             >
               <Typography>Guest Service Charge</Typography>
@@ -227,7 +247,7 @@ export default function BookingDetailsContent({ booking }: Props) {
             </Stack>
             <Stack direction="row" justifyContent="space-between">
               <Typography>Guest Paid</Typography>
-              <Typography>৳{getDecimalValue(paid_amount)}</Typography>
+              <Typography>৳{Math.round(paid_amount)}</Typography>
             </Stack>
           </Stack>
         </Card>
@@ -262,7 +282,7 @@ export default function BookingDetailsContent({ booking }: Props) {
             </Stack>
             <Stack direction="row" justifyContent="space-between">
               <Typography>Host Payout</Typography>
-              <Typography>৳{getDecimalValue(host_pay_out)}</Typography>
+              <Typography>৳{Math.round(host_pay_out)}</Typography>
             </Stack>
           </Stack>
         </Card>

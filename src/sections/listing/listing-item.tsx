@@ -77,7 +77,7 @@ export default function TourItem({ tour, onView, onEdit, onDelete }: Props) {
         bgcolor: 'warning.lighter',
       }}
     >
-      <Iconify icon="eva:star-fill" sx={{ color: 'warning.main', mr: 0.25 }} /> {avg_rating}
+      <Iconify icon="eva:star-fill" sx={{ color: 'warning.main', mr: 0.25 }} /> { }
     </Stack>
   );
 

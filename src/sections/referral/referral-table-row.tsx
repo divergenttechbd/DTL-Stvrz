@@ -9,6 +9,7 @@ import IconButton from '@mui/material/IconButton';
 import ListItemText from '@mui/material/ListItemText';
 // hooks
 import { useBoolean } from 'src/hooks/use-boolean';
+import { paths } from 'src/routes/paths';
 // types
 import { IUserItem } from 'src/types/user';
 // components
@@ -19,6 +20,7 @@ import { useRouter } from 'src/routes/hook';
 import _ from 'lodash';
 import { format } from 'date-fns';
 import MenuItem from '@mui/material/MenuItem';
+import { Link } from '@mui/material';
 import Box from '@mui/material/Box';
 //
 
@@ -41,6 +43,7 @@ export default function ReferralTableRow({
   const {
     id,
     username,
+    u_type,
     full_name,
     email,
     total_host_referrals_made,
@@ -61,28 +64,31 @@ export default function ReferralTableRow({
         <TableCell sx={{ alignContent: 'center' }}>#</TableCell>
         <TableCell sx={{ whiteSpace: 'nowrap' }}>
           <ListItemText
-            primary={full_name}
-            secondary={email}
+            primary={
+              <Link href={`${paths.dashboard.user.root}/${id}/edit`}>{full_name}</Link>
+            }
+            // primary={full_name}
+            secondary={username.split("_")[0]}
             primaryTypographyProps={{ typography: 'body2' }}
             secondaryTypographyProps={{ component: 'span', color: 'text.disabled' }}
           />
         </TableCell>
-        <TableCell sx={{ whiteSpace: 'nowrap' }}>{username}</TableCell>
-        <TableCell sx={{ whiteSpace: 'nowrap' }}>{total_host_referrals_made}</TableCell>
+        <TableCell sx={{ whiteSpace: 'nowrap' }}>{u_type}</TableCell>
+        {/* <TableCell sx={{ whiteSpace: 'nowrap' }}>{total_host_referrals_made}</TableCell> */}
         <TableCell sx={{ whiteSpace: 'nowrap' }}>{total_host_referrals_successful}</TableCell>
         <TableCell sx={{ whiteSpace: 'nowrap' }}>{total_host_referral_earnings}</TableCell>
-        <TableCell sx={{ whiteSpace: 'nowrap' }}>{total_guest_referrals_made}</TableCell>
+        {/* <TableCell sx={{ whiteSpace: 'nowrap' }}>{total_guest_referrals_made}</TableCell> */}
         <TableCell sx={{ whiteSpace: 'nowrap' }}>{total_guest_referrals_successful}</TableCell>
         <TableCell sx={{ whiteSpace: 'nowrap' }}>{total_guest_referral_points}</TableCell>
-        <TableCell sx={{ whiteSpace: 'nowrap' }}>
-          {/* <Button
+        {/* <TableCell sx={{ whiteSpace: 'nowrap' }}>
+          <Button
             sx={{ display: 'flex', alignItems: 'center', gap: 0.5, justifyContent: 'center' }}
 
           >
             <Iconify icon="solar:eye-bold" />
             <Box>View</Box>
-          </Button> */}
-        </TableCell>
+          </Button>
+        </TableCell> */}
       </TableRow>
 
       <ConfirmDialog

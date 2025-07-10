@@ -128,32 +128,38 @@ export default function BookingTableRow({
               <div key={r.id}>
                 {r.is_guest_review ?
                   <Box>
-                    <div><strong>Type:</strong> {r.is_guest_review === true && "Guest Review"}</div>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <div>
                         <strong>Rating:</strong> {r.rating}
                       </div>
                       <Iconify icon="eva:star-fill" sx={{ color: 'warning.main' }} />
                     </Box>
+                    <div><strong>Review:</strong> {r?.review}</div>
                   </Box>
-                  : <strong>No Guest Review</strong>
+                  : <strong>No Review</strong>
                 }
               </div>
             ))}
-            <Divider sx={{ borderStyle: 'dashed', my: 1 }} />
+          </Box>
+        ) : <strong>No Review</strong>}
+
+      </TableCell>
+      <TableCell sx={{ whiteSpace: 'nowrap' }}>
+        {reviews.length > 0 ? (
+          <Box>
             {reviews.map((r) => (
               <div key={r.id}>
                 {r.is_host_review ?
                   <Box>
-                    <div><strong>Type:</strong> {r.is_host_review === true && "Host Review"}</div>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <div>
                         <strong>Rating:</strong> {r.rating}
                       </div>
                       <Iconify icon="eva:star-fill" sx={{ color: 'warning.main' }} />
                     </Box>
+                    <div><strong>Type:</strong> {r?.review}</div>
                   </Box>
-                  : <strong>No Host Review</strong>
+                  : <strong>No Review</strong>
                 }
               </div>
             ))}

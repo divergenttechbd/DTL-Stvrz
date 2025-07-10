@@ -73,7 +73,7 @@ const TABLE_HEAD = [
 
 const HOST_TABLE_HEAD = [
   { id: 'host', label: 'Host', width: 180 },
-  // { id: 'property', label: 'Property', width: 180 },
+  { id: 'property', label: 'Property', width: 180 },
   { id: 'total', label: 'Total Amount', width: 100 },
 ];
 
