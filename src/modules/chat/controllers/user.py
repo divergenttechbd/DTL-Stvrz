@@ -25,6 +25,19 @@ async def get_chat_rooms(
         query_param=params, current_user=current_user
     )
 
+# @router.get("/rooms/", response_model=None) # Or just remove it
+# @permission_required(u_type=[UserTypeOption.GUEST, UserTypeOption.HOST])
+# async def get_chat_rooms(
+#     request: Request,
+#     chat_service: ChatService = Depends(Container().get_chat_service),
+#     params: QueryParam = Depends(CommonParam(filter_fields=["name"])),
+# ) -> Any:
+#     current_user = request.state.user
+#     # This will now return the raw data from the service layer
+#     # without trying to fit it into PaginatedResponse[ChatRoomResponse]
+#     return await chat_service.get_chat_rooms(
+#         query_param=params, current_user=current_user
+#     )
 
 @router.get(
     "/rooms/{room_id}/", response_model=PaginatedResponse[ChatRoomMessageResponse]
