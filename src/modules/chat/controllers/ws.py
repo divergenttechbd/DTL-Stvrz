@@ -31,254 +31,153 @@ from src.modules.chat.service import ChatService
 import re
 
 # broadcast = Broadcast("redis://localhost:6379")
-broadcast = Broadcast("redis://192.168.7.172:6379")
+# broadcast = Broadcast("redis://192.168.7.172:6379")
+broadcast = Broadcast("redis://45.114.85.18:6379")
 
 router = APIRouter(prefix="/user")
+import re
+from typing import Any
 
-EMAIL_REGEX = re.compile(
-    r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-)
-
-UUID_REGEX = re.compile(
-    r'\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b'
-)
-
-UUID_VARIANTS_REGEX = re.compile(
-    r'''
-    (?:
-        # Standard UUID format
-        \b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b|
-
-        # UUID without hyphens
-        \b[0-9a-fA-F]{32}\b|
-
-        # UUID with spaces instead of hyphens
-        \b[0-9a-fA-F]{8}\s[0-9a-fA-F]{4}\s[0-9a-fA-F]{4}\s[0-9a-fA-F]{4}\s[0-9a-fA-F]{12}\b|
-
-        # UUID with underscores
-        \b[0-9a-fA-F]{8}_[0-9a-fA-F]{4}_[0-9a-fA-F]{4}_[0-9a-fA-F]{4}_[0-9a-fA-F]{12}\b|
-
-        # UUID in curly braces
-        \{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}
-    )
-    ''',
-    re.VERBOSE | re.IGNORECASE
-)
+import re
+from typing import Any
 
 
 def remove_uuids_from_message(message: str) -> str:
+    UUID_REGEX = re.compile(
+        r'\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b'
+    )
+
+    UUID_VARIANTS_REGEX = re.compile(
+        r'''
+        (?:
+            # Standard UUID format
+            \b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b|
+            # UUID without hyphens
+            \b[0-9a-fA-F]{32}\b|
+            # UUID with spaces instead of hyphens
+            \b[0-9a-fA-F]{8}\s[0-9a-fA-F]{4}\s[0-9a-fA-F]{4}\s[0-9a-fA-F]{4}\s[0-9a-fA-F]{12}\b|
+            # UUID with underscores
+            \b[0-9a-fA-F]{8}_[0-9a-fA-F]{4}_[0-9a-fA-F]{4}_[0-9a-fA-F]{4}_[0-9a-fA-F]{12}\b|
+            # UUID in curly braces
+            \{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}
+        )
+        ''',
+        re.VERBOSE | re.IGNORECASE
+    )
 
     cleaned_message = UUID_REGEX.sub('', message)
     cleaned_message = UUID_VARIANTS_REGEX.sub('', cleaned_message)
-
     return cleaned_message
-
-
-HEAVY_EMAIL_REGEX = re.compile(
-    r'''
-    (                           # Start of the non-capturing outer group
-        # Standard email format
-        \b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b |
-
-        # Email with spaces around @ and dots
-        [A-Za-z0-9._%+-]+\s*@\s*[A-Za-z0-9.-]+\s*\.\s*[A-Za-z]{2,} |
-
-        # Email with separators and obfuscation
-        [A-Za-z0-9._%+-]+[\s\-*#]*@[\s\-*#]*[A-Za-z0-9.-]+[\s\-*#]*\.[\s\-*#]*[A-Za-z]{2,} |
-
-        # Email with 'at' and optional 'dot'
-        [A-Za-z0-9._%+-]+\s*(?:at|AT)\s*[A-Za-z0-9.-]+\s*(?:dot|DOT|\.)?\s*[A-Za-z]{2,} |
-
-        # Email with [at] or (at) or {at} and [dot]
-        [A-Za-z0-9._%+-]+\s*[\(\[\{]?(?:at|AT)[\)\]\}]?\s*[A-Za-z0-9.-]+\s*[\(\[\{]?(?:dot  |DOT|\.)[\)\]\}]?\s*[A-Za-z]{2,} |
-        
-        [A-Za-z0-9._%+-]+\s*(?:@|@)\s*[A-Za-z0-9.\-]+\s*(?:.|.)\s*[A-Za-z]{2,} |
-
-        # Email with underscores/dashes around @ and .
-        [A-Za-z0-9._%+-]+\s*[_\-]*\s*@\s*[_\-]*\s*[A-Za-z0-9.-]+\s*[_\-]*\s*\.\s*[_\-]*\s*[A-Za-z]{2,} |
-
-        # Split emails
-        [A-Za-z0-9._%+-]+\s+@\s+[A-Za-z0-9.-]+\s+\.\s+[A-Za-z]{2,} |
-
-
-        # Partial pattern
-        [A-Za-z0-9._%+-]{3,}\s*@\s*[A-Za-z0-9.-]{3,}\s*\.\s*[A-Za-z]{2,}
-        
-       
-    )                       
-    ''',
-    re.VERBOSE | re.IGNORECASE
-)
-
-
-# Pattern for common text obfuscations
-EMAIL_OBFUSCATION_REGEX = re.compile(
-    r'''
-    (?:
-        # "at" variations
-        [A-Za-z0-9._%+-]+\s*(?:at|AT|@|＠)\s*[A-Za-z0-9.\-]+\s*(?:dot|DOT|\.)\s*(?:com|org|net|edu|gov|co|io|me|info|biz|uk|us|ca|au|de|fr|jp|in|bd|[a-z]{2,4})|
-
-        # Bracketed variations
-        [A-Za-z0-9._%+-]+\s*[\(\[\{]\s*(?:at|AT)\s*[\)\]\}]\s*[A-Za-z0-9.\-]+\s*[\(\[\{]\s*(?:dot|DOT)\s*[\)\]\}]\s*[A-Za-z]{2,4}|
-
-        # Spaced out emails
-        [A-Za-z0-9._%-]+\s+@\s+[A-Za-z0-9.\-]+\s+\.\s+[A-Za-z]{2,4}|
-
-        # Email with extra characters
-        [A-Za-z0-9._%+-]+[\*\#\s]*@[\*\#\s]*[A-Za-z0-9.\-]+[\*\#\s]*\.[\*\#\s]*[A-Za-z]{2,4}
-    )
-    ''',
-    re.VERBOSE | re.IGNORECASE
-)
-
-# Pattern for written/spelled out emails
-WRITTEN_EMAIL_REGEX = re.compile(
-    r'(?:email|e-mail|mail|contact)[\s\-:]*(?:is|address)?[\s\-:]*[A-Za-z0-9._%+-]+[\s\-]*(?:at|@)[\s\-]*[A-Za-z0-9.-]+[\s\-]*(?:dot|\.)[\s\-]*[A-Za-z]{2,4}',
-    re.IGNORECASE
-)
-
-# Common domain patterns that might be obfuscated
-DOMAIN_PATTERN_REGEX = re.compile(
-    r'[A-Za-z0-9._%+-]+\s*[@at]+\s*(?:gmail|yahoo|hotmail|outlook|protonmail|icloud|aol|live|msn)\s*(?:dot|\.)?\s*(?:com|org|net|co|uk|in|bd)',
-    re.IGNORECASE
-)
-
-
-
-SANITIZED_PHONE_REGEX = re.compile(
-    r'^(?:\+?88)?01[3-9]\d{8}$'
-)
-
-HEAVY_PHONE_REGEX = re.compile(
-    r'''
-    (?:
-        # Bangladesh numbers with country code variations
-        (?:\+?88[\s\-\.\(\)]*)?
-        (?:0?1[3-9][\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d)|
-
-        # International format variations
-        (?:\+[\s\-\.\(\)]*8[\s\-\.\(\)]*8[\s\-\.\(\)]*0?1[3-9][\s\-\.\(\)]*\d{8})|
-
-        # Any 11-digit sequence starting with 01[3-9]
-        (?:0?1[3-9][\s\-\.\(\)\*\#]*\d[\s\-\.\(\)\*\#]*\d[\s\-\.\(\)\*\#]*\d[\s\-\.\(\)\*\#]*\d[\s\-\.\(\)\*\#]*\d[\s\-\.\(\)\*\#]*\d[\s\-\.\(\)\*\#]*\d[\s\-\.\(\)\*\#]*\d)|
-
-        # Partial numbers that could be completed
-        (?:(?:\+?88[\s\-\.\(\)]*)?0?1[3-9][\s\-\.\(\)\*\#]*\d{6,8})|
-
-        # Common formats with extra characters
-        (?:(?:\+?88[\s\-\.\(\)]*)?[\(\[]?0?1[3-9][\)\]]?[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d[\s\-\.\(\)]*\d)|
-
-        # Numbers with word boundaries
-        (?:\b(?:\+?88[\s\-\.\(\)]*)?0?1[3-9]\d{8}\b)|
-
-        # Any sequence that looks like a BD mobile (more permissive)
-        (?:(?:\+?88)?[\s\-\.\(\)]*0?1[3456789][\s\-\.\(\)\*\#]*(?:\d[\s\-\.\(\)\*\#]*){8})
-    )
-    ''',
-    re.VERBOSE | re.IGNORECASE
-)
-
-
-NUMERIC_WORD_REGEX = re.compile(
-    r'(?:zero|one|two|three|four|five|six|seven|eight|nine|oh)(?:\s+(?:zero|one|two|three|four|five|six|seven|eight|nine|oh)){10,}',
-    re.IGNORECASE
-)
-
-
-SPACED_NUMBER_REGEX = re.compile(
-    r'(?:\+?88\s*)?0?\s*1\s*[3-9](?:\s*\d){8,}',
-    re.IGNORECASE
-)
-
-
-SEPARATOR_REGEX = re.compile(
-    r'(?:\+?88)?[^\w]*0?1[3-9](?:[^\w]*\d){8}',
-    re.IGNORECASE
-)
 
 
 def is_phone_number_present(message: str) -> bool:
     """
-    Check for phone numbers while excluding UUIDs
+    Conservative phone number detection that only catches actual phone numbers
     """
-    # Remove UUIDs first to prevent false positives
+    # Remove UUIDs first
     cleaned_message = remove_uuids_from_message(message)
 
-    # Original sanitized check
-    sanitized_message = re.sub(r'[^\d+]', '', cleaned_message)
-    original_regex = re.compile(r'^(?:\+?88)?01[3-9]\d{8}$')
-    if original_regex.search(sanitized_message):
-        return True
+    # Remove JSON structure and common non-phone contexts to avoid false positives
+    temp_message = cleaned_message
 
-    # Heavy regex check on cleaned message
-    if HEAVY_PHONE_REGEX.search(cleaned_message):
-        return True
+    # Remove entire JSON-like structures
+    temp_message = re.sub(r"'[^']*':\s*\d+", "", temp_message)  # Remove 'property':1523
+    temp_message = re.sub(r"'[^']*':\s*'[^']*'", "", temp_message)  # Remove 'cost':'BDT 1200/per night'
+    temp_message = re.sub(r'"[^"]*":\s*\d+', "", temp_message)  # Remove "property":1523
+    temp_message = re.sub(r'"[^"]*":\s*"[^"]*"', "", temp_message)  # Remove "cost":"BDT 1200/per night"
 
-    # Additional phone detection logic (simplified)
-    # Check for numbers split across words
-    words = cleaned_message.split()
-    concatenated = ''.join(re.findall(r'\d', ' '.join(words)))
-    if len(concatenated) >= 11 and re.match(r'(?:88)?01[3-9]\d{8}', concatenated):
-        return True
+    # Remove common non-phone number patterns
+    temp_message = re.sub(r'BDT\s*\d+', '', temp_message)  # Remove BDT amounts
+    temp_message = re.sub(r'\d+/per\s+\w+', '', temp_message)  # Remove rates like "1200/per night"
+    temp_message = re.sub(r'\d+(?:st|nd|rd|th)\s+floor', '', temp_message)  # Remove floor numbers
+    temp_message = re.sub(r'https?://[^\s\'\"]+', '', temp_message)  # Remove URLs
+    temp_message = re.sub(r'[a-fA-F0-9]{8,}', '', temp_message)  # Remove long hex strings
+
+    # Only look for phone numbers with clear context or formatting
+    phone_patterns = [
+        # Phone numbers with clear context words
+        r'(?:phone|mobile|call|contact|number|dial|reach)[\s\-:]*(?:\+?88[\s\-]*)?0?1[3-9][\s\-]*\d{8}',
+
+        # Phone numbers with specific formatting (parentheses, clear separators)
+        r'[\(\[](?:\+?88[\s\-]*)?0?1[3-9][\s\-]*\d{8}[\)\]]',
+
+        # Phone numbers with country code clearly indicated
+        r'\+88[\s\-]*0?1[3-9][\s\-]*\d{8}',
+
+        # Phone numbers with clear separators (dashes, spaces) - must be 11 digits
+        r'(?<!\d)01[3-9][\s\-]{1,2}\d{3}[\s\-]{1,2}\d{3}[\s\-]{1,2}\d{3}(?!\d)',
+
+        # Phone numbers clearly separated by spaces or dashes
+        r'(?<!\d)(?:\+?88[\s\-]+)?01[3-9](?:[\s\-]+\d){8}(?!\d)',
+
+        # Stand-alone phone numbers at word boundaries with minimum formatting
+        r'(?<!\d)(?:\+?88)?01[3-9]\d{8}(?!\d)(?=\s|$|[^\d])',
+    ]
+
+    # Check patterns on cleaned message
+    for pattern in phone_patterns:
+        matches = re.findall(pattern, temp_message, re.IGNORECASE)
+        for match in matches:
+            # Extract only digits
+            digits_only = re.sub(r'[^\d]', '', match)
+
+            # Validate Bangladesh mobile number format
+            if len(digits_only) == 11 and digits_only.startswith('01') and digits_only[2] in '3456789':
+                return True
+            elif len(digits_only) == 13 and digits_only.startswith('88') and digits_only[2:4] == '01' and digits_only[
+                4] in '3456789':
+                return True
+
+    # Check for standalone Bangladesh phone numbers in the original message
+    # This catches cases like "01716990881" sent as a standalone message
+    standalone_pattern = r'(?<!\d)01[3-9]\d{8}(?!\d)'
+    standalone_matches = re.findall(standalone_pattern, cleaned_message)
+
+    for match in standalone_matches:
+        # Make sure it's not part of a larger number or within structured data
+        # Check if it's surrounded by non-digit characters or at string boundaries
+        if re.search(r'(?<!\d)' + re.escape(match) + r'(?!\d)', cleaned_message):
+            # Additional check: make sure it's not within a JSON structure
+            # Look for the pattern in the original context
+            match_context = re.search(r'.{0,20}' + re.escape(match) + r'.{0,20}', cleaned_message)
+            if match_context:
+                context = match_context.group()
+                # Skip if it's clearly within structured data (has quotes and colons nearby)
+                if not (re.search(r'[\'"][^\'":]*' + re.escape(match) + r'[^\'":]*[\'"]', context) or
+                        re.search(r'[\'"][^\'":]*:\s*' + re.escape(match), context)):
+                    return True
+
+    # Check for obvious phone sharing patterns only
+    phone_sharing_patterns = [
+        r'(?:my|call|phone|mobile|number|contact)[\s\w]*(?:is|:)[\s]*(?:\+?88[\s\-]*)?0?1[3-9][\s\-]*\d{8}',
+        r'(?:\+?88[\s\-]*)?0?1[3-9][\s\-]*\d{8}[\s]*(?:is|call|phone|mobile|number|contact)',
+    ]
+
+    for pattern in phone_sharing_patterns:
+        if re.search(pattern, temp_message, re.IGNORECASE):
+            return True
 
     return False
 
 
 def is_email_present(message: str) -> bool:
     """
-    Comprehensive email detection function
-    Checks for emails in multiple formats and obfuscation attempts
+    Conservative email detection
     """
+    # Basic email pattern - only catch obvious emails
+    basic_email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'
 
-    # Primary heavy regex check
-    if HEAVY_EMAIL_REGEX.search(message):
+    if re.search(basic_email_pattern, message):
         return True
 
-    # Check for obfuscated emails
-    if EMAIL_OBFUSCATION_REGEX.search(message):
-        return True
-
-    # Check for written/spelled out emails
-    if WRITTEN_EMAIL_REGEX.search(message):
-        return True
-
-    # Check for common domain patterns
-    if DOMAIN_PATTERN_REGEX.search(message):
-        return True
-
-    # Normalize common substitutions and check again
-    normalized_message = message.replace('(at)', '@').replace('[at]', '@').replace('{at}', '@')
-    normalized_message = normalized_message.replace('(dot)', '.').replace('[dot]', '.').replace('{dot}', '.')
-    normalized_message = normalized_message.replace(' at ', '@').replace(' dot ', '.')
-    normalized_message = normalized_message.replace('＠', '@')  # Full-width @
-
-    if HEAVY_EMAIL_REGEX.search(normalized_message):
-        return True
-
-    # Check for emails with excessive spacing
-    spaced_removed = re.sub(r'\s+', '', message)
-    if re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', spaced_removed):
-        return True
-
-    # Check for partial email patterns that might be intentionally broken
-    partial_patterns = [
-        r'[A-Za-z0-9._%+-]{3,}@[A-Za-z0-9.-]{3,}',  # Missing TLD
-        r'[A-Za-z0-9._%+-]{3,}\s+@\s+[A-Za-z0-9.-]{3,}',  # Spaced @ but missing TLD
-        r'@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}',  # Missing username
+    # Check for obvious email obfuscation attempts
+    obfuscation_patterns = [
+        r'[A-Za-z0-9._%+-]+\s*(?:at|AT)\s*[A-Za-z0-9.-]+\s*(?:dot|DOT)\s*(?:com|org|net|edu|gov)',
+        r'[A-Za-z0-9._%+-]+\s*[\(\[\{]at[\)\]\}]\s*[A-Za-z0-9.-]+\s*[\(\[\{]dot[\)\]\}]\s*[A-Za-z]{2,4}',
+        r'(?:email|e-mail|mail|contact)[\s\-:]*(?:is|address)?[\s\-:]*[A-Za-z0-9._%+-]+[@at][A-Za-z0-9.-]+[.dot][A-Za-z]{2,4}',
     ]
 
-    for pattern in partial_patterns:
-        if re.search(pattern, message, re.IGNORECASE):
-            return True
-
-    # Check for email-like patterns with common typos/obfuscations
-    typo_patterns = [
-        r'[A-Za-z0-9._%+-]+\s*[@＠]\s*g\s*m\s*a\s*i\s*l\s*[.\s]*c\s*o\s*m',  # spaced gmail
-        r'[A-Za-z0-9._%+-]+\s*[@＠]\s*y\s*a\s*h\s*o\s*o\s*[.\s]*c\s*o\s*m',  # spaced yahoo
-        r'[A-Za-z0-9._%+-]+\s*[@＠]\s*h\s*o\s*t\s*m\s*a\s*i\s*l\s*[.\s]*c\s*o\s*m',  # spaced hotmail
-    ]
-
-    for pattern in typo_patterns:
+    for pattern in obfuscation_patterns:
         if re.search(pattern, message, re.IGNORECASE):
             return True
 
@@ -286,7 +185,9 @@ def is_email_present(message: str) -> bool:
 
 
 def is_contact_info_present(message: str) -> bool:
-
+    """
+    Conservative contact info detection
+    """
     message_without_uuids = remove_uuids_from_message(message).strip()
     if not message_without_uuids:
         return False
@@ -298,7 +199,6 @@ def is_contact_info_present(message: str) -> bool:
         return True
 
     return False
-
 def custom_encoder(obj):
     if isinstance(obj, (ObjectId, PydanticObjectId)):
         return str(obj)
@@ -505,6 +405,7 @@ async def chatroom_ws_receiver(
 
                     user_message_content = body.get("message", "")
                     if is_contact_info_present(user_message_content):
+                        print(" ----------------- ")
                         error_payload = {
                             "action": "error",
                             "type": "forbidden_content",

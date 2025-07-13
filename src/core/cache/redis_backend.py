@@ -4,7 +4,8 @@ import redis.asyncio as aioredis
 
 
 # redis = aioredis.from_url(url="redis://localhost:6379")
-redis = aioredis.from_url(url="redis://192.168.7.172:6379")
+# redis = aioredis.from_url(url="redis://192.168.7.172:6379")
+redis = aioredis.from_url(url="redis://45.114.85.18:6379")
 
 
 class RedisBackend:
