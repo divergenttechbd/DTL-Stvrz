@@ -234,9 +234,7 @@ class AdminHostPaymentRetrieveUpdateAPIView(views.APIView):
         send_notification(notification_data=notification_data)
 
         host_device_token = FCMToken.objects.filter(user_id=instance.host_id).first()
-        if host_device_token and get_cache(
-            key=f"user_mobile_logged_in_{instance.host.username}"
-        ):
+        if host_device_token :
             title = "Payment Message"
             body = f"Congratulations ! You’ve got a new payout from Stayverz"
             data = {"url": "/host-dashboard/earnings", "key2": "value2"}

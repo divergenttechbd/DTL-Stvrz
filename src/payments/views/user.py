@@ -22,11 +22,13 @@ from base.type_choices import (
     BookingStatusOption,
     OnlinePaymentMethodOption,
     OnlinePaymentStatusOption,
-    PaymentStatusOption,
+    PaymentStatusOption, NotificationTypeOption, NotificationEventTypeOption,
 )
 from bookings.models import Booking
 from bookings.serializers import BookingSerializer
 from listings.models import Listing, ListingCalendar
+from notifications.models import Notification
+from notifications.utils import create_notification, send_notification
 from payments.models import OnlinePayment
 from payments.serializers import OnlinePaymentSerializer
 from payments.tasks.booking import booking_confirmed_process
@@ -179,6 +181,45 @@ class CustomerSSLCommerzIPNView(views.APIView):
                         total_booking_count=F("total_booking_count") + 1
                     )
 
+
+                    # ------
+                    event_type = NotificationEventTypeOption.BOOKING_CONFIRMED
+                    guest_notification = create_notification(
+                        event_type=event_type,
+                        data={
+                            "identifier": booking.invoice_no,
+                            "message": "Congratulations! You’ve successfully completed your booking.",
+                            # This link is crucial for mobile deep-linking
+                            "link": f"/my-bookings/{booking.invoice_no}",
+                        },
+                        n_type=NotificationTypeOption.USER_NOTIFICATION,
+                        user_id=booking.guest_id,
+                    )
+
+                    # 2. Create notification for the Host
+                    host_notification = create_notification(
+                        event_type=event_type,
+                        data={
+                            "identifier": booking.invoice_no,
+                            "message": "Congratulations! A guest booked your property just now.",
+                            # This link takes the host to their dashboard
+                            "link": f"/host-dashboard/bookings/{booking.invoice_no}",
+                        },
+                        n_type=NotificationTypeOption.USER_NOTIFICATION,
+                        user_id=booking.host_id,
+                    )
+
+                    # This list will be used twice: once to save, once to send.
+                    notification_data = [guest_notification, host_notification]
+
+                    # 3. Save notifications to the DB within the transaction
+                    Notification.objects.bulk_create(
+                        [Notification(**item) for item in notification_data]
+                    )
+                    # =====
+
+
+
                     booking_data = {
                         "user": UserSerializer(
                             booking.guest,
@@ -231,6 +272,8 @@ class CustomerSSLCommerzIPNView(views.APIView):
                     host.save()
                     online_payment.save()
 
+                send_notification(notification_data=notification_data)
+
                 send_sms(
                     username=booking.guest.phone_number,
                     message="Congratulations ! You’ve successfully completed your booking",
@@ -239,7 +282,7 @@ class CustomerSSLCommerzIPNView(views.APIView):
                     username=host.phone_number,
                     message="Congratulations ! A guest booked your property just now",
                 )
-                booking_confirmed_process.delay(booking_id=booking.id)  # delay
+                booking_confirmed_process.delay(booking_id=booking.id)
 
             return Response(
                 {"message": "Payment request received"}, status=status.HTTP_201_CREATED

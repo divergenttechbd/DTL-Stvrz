@@ -47,6 +47,7 @@ class AuthMiddleware:
                         data={"message": "no access token provided", "success": False},
                         status=400,
                     )
+                print(" ------- ", payload)
                 user_obj = self.get_user(data=payload)
                 print(user_obj)
                 if not user_obj:

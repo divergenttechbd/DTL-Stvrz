@@ -274,85 +274,113 @@ class AdminUserRetrieveUpdateAPIView(APIView):
     @swagger_auto_schema(request_body=StatusUpdateSerializer)
     def patch(self, request, *args, **kwargs):
         serializer = StatusUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        if serializer.is_valid(raise_exception=True):
-            user = User.objects.get(id=kwargs.get("pk"), is_staff=False)
+        user = User.objects.get(id=kwargs.get("pk"), is_staff=False)
+        validated_data = serializer.validated_data
 
-            notification_data = []
-            if serializer.validated_data.get("user_status") != user.status:
-                event_type = NotificationEventTypeOption.USER_VERIFICATION
-                user_notification = create_notification(
-                    event_type=event_type,
-                    data={
-                        "identifier": str(user.id),
-                        "message": f"Your submission for identity verification is {serializer.validated_data.get('identity_status')}",
-                        "link": f"/user/profile",
-                    },
-                    n_type=NotificationTypeOption.USER_NOTIFICATION,
-                    user_id=user.id,
-                )
+        # --- 1. Determine what changed ---
+        new_user_status = validated_data.get("user_status")
+        new_identity_status = validated_data.get("identity_status")
 
-                admin_notification = create_notification(
-                    event_type=event_type,
-                    data={
-                        "identifier": str(user.id),
-                        "message": f"Identity verification {request.data.get('identity_status')} for a {user.get_full_name()}",
-                        "link": f"/user/{user.id}/edit",
-                    },
-                    n_type=NotificationTypeOption.ADMIN_NOTIFICATION,
-                )
-                notification_data = [
-                    user_notification,
-                    admin_notification,
-                ]
+        user_status_changed = new_user_status and new_user_status != user.status
+        identity_status_changed = new_identity_status and new_identity_status != user.identity_verification_status
 
-            user_status = serializer.validated_data.get("user_status", user.status)
-            identity_status = serializer.validated_data.get(
-                "identity_status", user.identity_verification_status
-            )
-            user.status = user_status
-            user.first_name = serializer.validated_data.get(
-                "first_name", user.first_name
-            )
-            user.phone_number = serializer.validated_data.get(
-                "phone_number", user.phone_number
-            )
-            user.email = serializer.validated_data.get(
-                "email", user.email
-            )
-            user.last_name = serializer.validated_data.get("last_name", user.last_name)
-            user.is_active = user_status == UserStatusOption.ACTIVE
-            user.identity_verification_status = identity_status
+        print(user_status_changed, identity_status_changed, new_user_status, new_identity_status, " --------- ")
+        if not user_status_changed and not identity_status_changed:
+
+            pass
+
+
+        user_message_parts = []
+        if user_status_changed:
+            user_message_parts.append(f"Your account status has been updated to '{new_user_status}'.")
+
+        if identity_status_changed:
+            identity_msg = f"Your identity verification status is now '{new_identity_status}'."
+
+            if new_identity_status == "rejected":
+                reason = validated_data.get("reject_reason")
+                if reason:
+                    identity_msg += f" Reason: {reason}"
+            user_message_parts.append(identity_msg)
+
+        final_user_message = " ".join(user_message_parts)
+
+
+        user.first_name = validated_data.get("first_name", user.first_name)
+        user.last_name = validated_data.get("last_name", user.last_name)
+        user.phone_number = validated_data.get("phone_number", user.phone_number)
+        user.email = validated_data.get("email", user.email)
+
+        if user_status_changed:
+            user.status = new_user_status
+            user.is_active = new_user_status == UserStatusOption.ACTIVE
+
+        if identity_status_changed:
+            user.identity_verification_status = new_identity_status
             user.identity_verification_reject_reason = (
-                serializer.validated_data.get("reject_reason", "")
-                if identity_status == "rejected"
+                validated_data.get("reject_reason", "")
+                if new_identity_status == "rejected"
                 else ""
             )
-            with transaction.atomic():
-                user.save()
-                if len(notification_data) > 0:
-                    Notification.objects.bulk_create(
-                        [Notification(**item) for item in notification_data]
-                    )
 
-            if len(notification_data) > 0:
-                send_notification(notification_data=notification_data)
 
-            host_device_token = FCMToken.objects.filter(user_id=user.id).first()
-            if host_device_token and get_cache(
-                key=f"user_mobile_logged_in_{user.username}"
-            ):
-                fcm_title = "Inquiry Message"
-                fcm_body = f"Your submission for identity verification is {serializer.validated_data.get('identity_status')}"
+        notifications_to_create = []
+        print(" ----- final_user_message ", final_user_message)
+        if final_user_message:
 
-                fcm_data = {"url": f"/user/profile", "key2": "value2"}
-                send_fcm_notification.delay(
-                    host_device_token.token, fcm_title, fcm_body, fcm_data
+            user_notification_payload = create_notification(
+                event_type=NotificationEventTypeOption.USER_VERIFICATION,
+                data={
+                    "identifier": str(user.id),
+                    "message": final_user_message,
+                    "link": "/user/profile",
+                },
+                n_type=NotificationTypeOption.USER_NOTIFICATION,
+                user_id=user.id,
+            )
+            notifications_to_create.append(user_notification_payload)
+
+
+            admin_message = f"Status update for {user.get_full_name()}: {final_user_message}"
+            admin_notification_payload = create_notification(
+                event_type=NotificationEventTypeOption.USER_VERIFICATION,
+                data={
+                    "identifier": str(user.id),
+                    "message": admin_message,
+                    "link": f"/user/{user.id}/edit",
+                },
+                n_type=NotificationTypeOption.ADMIN_NOTIFICATION,
+            )
+            notifications_to_create.append(admin_notification_payload)
+
+
+        with transaction.atomic():
+            user.save()
+            if notifications_to_create:
+                Notification.objects.bulk_create(
+                    [Notification(**item) for item in notifications_to_create]
                 )
 
-            return Response(
-                {"message": "Status updated successfully."}, status=status.HTTP_200_OK
-            )
+
+        if notifications_to_create:
+            print(" ------- A -----------")
+            send_notification(notification_data=notifications_to_create)
+
+            host_device_token = FCMToken.objects.filter(user_id=user.id).first()
+            print(" ---------- fcm -----------")
+            if host_device_token:
+                send_fcm_notification.delay(
+                    device_token=host_device_token.token,
+                    title="Account Update",
+                    body=final_user_message,
+                    data={"url": "/user/profile"}
+                )
+
+        return Response(
+            {"message": "User updated successfully."}, status=status.HTTP_200_OK
+        )
 
 
 class AdminDashboardStatAPIView(APIView):

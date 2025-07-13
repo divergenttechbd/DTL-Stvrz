@@ -214,3 +214,108 @@ class DistrictListAPIView(APIView):
                     pass
 
         return Response(places, status=status.HTTP_200_OK)
+
+
+class SubDistrictListByDistrictAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    BARIKOI_URL = "https://barikoi.xyz/v2/api/sub_districts/"
+
+    @swagger_auto_schema(
+        manual_parameters=[
+            openapi.Parameter(
+                # Changed the parameter name to be more descriptive
+                name="district_name",
+                in_=openapi.IN_QUERY,
+                description="The name of the district to filter by (e.g., Khulna, Dhaka).",
+                required=True,
+                type=openapi.TYPE_STRING,
+                example="Khulna",
+            )
+        ],
+        responses={
+            200: openapi.Schema(
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    description="A list of sub-districts (upazilas) within the specified district.",
+                    # Updated the response schema to match the desired output
+                    properties={
+                        "name": openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description="Name of the sub-district.",
+                            example="Koyra"
+                        ),
+                        "lat": openapi.Schema(
+                            type=openapi.TYPE_NUMBER,
+                            description="Latitude of the sub-district's center.",
+                            example=22.145548166
+                        ),
+                        "long": openapi.Schema(
+                            type=openapi.TYPE_NUMBER,
+                            description="Longitude of the sub-district's center.",
+                            example=89.382179532
+                        ),
+                    },
+                ),
+            )
+        },
+    )
+    def get(self, request):
+        # 1. Get the district name from the query parameters
+        district_name = request.GET.get("district_name", "").strip()
+        if not district_name:
+            return Response(
+                {"detail": "Missing required query parameter `district_name`."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 2. Fetch ALL sub-districts from the Barikoi API
+        try:
+            # Note: We are not passing the district_name to the API,
+            # as it doesn't support filtering by district. We fetch everything.
+            r = requests.get(
+                self.BARIKOI_URL,
+                params={"api_key": settings.BARIKOI_API_KEY},
+                timeout=10,  # Increased timeout for potentially larger payload
+            )
+            r.raise_for_status()
+        except requests.exceptions.RequestException as exc:
+            return Response(
+                {"detail": f"Upstream API error: {exc}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        all_places = r.json().get("places", [])
+
+        # 3. Filter and Transform the data
+        # We will create a new list to hold our results in the desired format.
+        results = []
+
+        # We perform a case-insensitive comparison for the district name
+        search_district_lower = district_name.lower()
+
+        for place in all_places:
+            # Check if the place belongs to the requested district
+            if place.get("district", "").lower() == search_district_lower:
+                center_raw = place.get("center")
+                # Ensure 'center' exists and is a string before trying to parse it
+                if isinstance(center_raw, str):
+                    try:
+                        center_data = json.loads(center_raw)
+                        coordinates = center_data.get("coordinates")
+
+                        # GeoJSON format is [longitude, latitude]
+                        if isinstance(coordinates, list) and len(coordinates) == 2:
+                            results.append({
+                                "name": place.get("name"),
+                                "lat": coordinates[1],  # Latitude is the second element
+                                "long": coordinates[0],  # Longitude is the first element
+                            })
+
+                    except json.JSONDecodeError:
+                        # If 'center' is a malformed string, we just skip this place
+                        pass
+
+        # 4. Return the filtered and transformed list
+        return Response(results, status=status.HTTP_200_OK)

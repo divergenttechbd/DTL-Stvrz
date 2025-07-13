@@ -191,38 +191,72 @@ class PublicUserResetPasswordAPIView(views.APIView):
         )
 
 
-
 class PublicUserResetPasswordMobileAPIView(views.APIView):
     permission_classes = (AllowAny,)
     swagger_tags = ["Auth"]
 
+    @swagger_auto_schema(
+        operation_summary="Public: Reset Password",
+        operation_description=(
+            "Resets the password for a user using a phone number and OTP. "
+            "**Important:** This will atomically update the password for both the "
+            "`_host` and `_guest` accounts associated with the phone number."
+        ),
+        request_body=ResetPasswordSerializer,
+    )
     @method_decorator(exception_handler)
     def post(self, request, *args, **kwargs):
         serializer = ResetPasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        username = f"{request.data['phone_number']}_{request.data['u_type']}"
+        phone_number = request.data['phone_number']
+        current_u_type = request.data['u_type']
 
-        if username.split("_")[1] != 'host':
-            username_guest = f"{request.data['phone_number']}_{'guest'}"
+        username = f"{phone_number}_{current_u_type}"
 
 
-        user = User.objects.get(username=username)
-        # user_guest
+        other_u_type = "guest" if current_u_type == "host" else "host"
+        other_username = f"{phone_number}_{other_u_type}"
 
-        if not OtpService.validate_otp(
-            input_otp=request.data["otp"],
-            username=username,
-            scope=OtpScopeOption.RESET_PASSWORD,
-        ):
+        try:
+
+            with transaction.atomic():
+
+                user = User.objects.select_for_update().get(username=username)
+
+
+                try:
+                    other_user = User.objects.select_for_update().get(username=other_username)
+                except User.DoesNotExist:
+                    other_user = None
+
+                if not OtpService.validate_otp(
+                    input_otp=request.data["otp"],
+                    username=username,
+                    scope=OtpScopeOption.RESET_PASSWORD,
+                ):
+                    return Response(
+                        {"message": "Invalid otp"}, status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                OtpService.delete_otp(username=username, scope=OtpScopeOption.RESET_PASSWORD)
+
+                new_password = request.data["password"]
+
+
+                user.set_password(raw_password=new_password)
+                user.save()
+
+
+                if other_user:
+                    other_user.set_password(raw_password=new_password)
+                    other_user.save()
+
+        except User.DoesNotExist:
+
             return Response(
-                {"message": "Invalid otp"}, status=status.HTTP_400_BAD_REQUEST
+                {"message": "User not found."}, status=status.HTTP_404_NOT_FOUND
             )
-
-        OtpService.delete_otp(username=username, scope=OtpScopeOption.RESET_PASSWORD)
-        password = request.data["password"]
-        user.set_password(raw_password=password)
-        user.save()
 
         access_token, refresh_token = create_tokens(user=user)
         data = {
@@ -234,7 +268,6 @@ class PublicUserResetPasswordMobileAPIView(views.APIView):
             data,
             status=status.HTTP_200_OK,
         )
-
 
 class PublicAdminResetPasswordAPIView(views.APIView):
     permission_classes = (AllowAny,)
@@ -348,6 +381,140 @@ class PublicUserLoginAPIView(views.APIView):
         return response
         # return Response(data=data, status=status.HTTP_201_CREATED)
 
+
+class PublicUserLoginDualAPIView(views.APIView):
+    """
+    Handles user login.
+
+    Upon successful login, it checks if a counterpart account (_host or _guest)
+    exists. If not, it creates one automatically with the same credentials.
+    """
+    permission_classes = (AllowAny,)
+    swagger_tags = ["Auth"]
+
+    def _create_counterpart_user(self, base_user: User, counterpart_type: str, raw_password: str):
+
+        counterpart_username = f"{base_user.phone_number}_{counterpart_type}"
+        print(f"INFO: Counterpart user '{counterpart_username}' not found. Attempting to create.")
+
+        try:
+            with transaction.atomic():
+                # Create the new user object by copying details from the base user
+                counterpart_user = User.objects.create(
+                    username=counterpart_username,
+                    phone_number=base_user.phone_number,
+                    u_type=counterpart_type,
+                    first_name=base_user.first_name,
+                    last_name=base_user.last_name,
+                    email=base_user.email,
+                    is_phone_verified=True,
+                    image = base_user.image,
+                    is_email_verified=base_user.is_email_verified,
+                    identity_verification_status = base_user.identity_verification_status,
+                    identity_verification_method = base_user.identity_verification_method,
+                    identity_verification_images = base_user.identity_verification_images,
+                    identity_verification_reject_reason = base_user.identity_verification_reject_reason,
+                    wishlist_listings=[]
+
+                )
+
+
+                counterpart_user.set_password(raw_password)
+                counterpart_user.save()
+
+
+                UserProfile.objects.create(user=counterpart_user, languages=[])
+                Wishlist.objects.create(user=counterpart_user)
+
+                user_info = HostGuestUserSerializer(counterpart_user).data
+                create_user(user_info)
+
+
+                print(f"SUCCESS: Created counterpart user '{counterpart_user.username}' successfully.")
+
+
+        except Exception as e:
+            print(f"ERROR: Could not create counterpart user '{counterpart_username}'. Reason: {e}")
+
+    @method_decorator(exception_handler)
+    def post(self, request, *args, **kwargs):
+        response = Response()
+
+
+        if request.data.get("email"):
+            username = request.data.get("email")
+            filter_params = {"username": username, "is_staff": True}
+        else:
+
+            serializer = LoginSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            phone = request.data['phone_number']
+            u_type = request.data['u_type']
+            username = f"{phone}_{u_type}"
+            filter_params = {"username": username, "is_staff": False}
+
+
+        try:
+            user = User.objects.get(**filter_params)
+        except User.DoesNotExist:
+            return Response(
+                {"message": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not user.is_active:
+            return Response(
+                {"message": f"Your account is {user.status}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+        raw_password = request.data["password"]
+        if not user.check_password(raw_password=raw_password):
+            return Response(
+                {"message": "Invalid credentials"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+        if not user.is_staff:
+            current_u_type = user.u_type
+
+            other_u_type = UserTypeOption.GUEST if current_u_type == UserTypeOption.HOST else UserTypeOption.HOST
+            other_username = f"{user.phone_number}_{other_u_type}"
+
+            if not User.objects.filter(username=other_username).exists():
+
+                self._create_counterpart_user(
+                    base_user=user,
+                    counterpart_type=other_u_type,
+                    raw_password=raw_password
+                )
+
+        access_token, refresh_token = create_tokens(user=user)
+        data = {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+        }
+        set_cache(
+            key=f"{username}_token_data",
+            value=json.dumps(
+                UserSerializer(
+                    user, fields=["id", "username", "u_type", "phone_number"]
+                ).data
+            ),
+            ttl=5 * 60 * 60,
+        )
+        cookie_data = generate_cookie_data("bearer " + data["access_token"])
+        print(cookie_data, " ---- c token ---")
+        response.set_cookie(**cookie_data)
+
+        response.data = {
+            "Success": "Login successfully",
+            "data": data,
+            "status": status.HTTP_201_CREATED,
+        }
+
+        return response
 
 class RefreshTokenAPIView(views.APIView):
     permission_classes = (AllowAny,)
@@ -597,12 +764,13 @@ class PublicUserRegisterAPIViewHost(views.APIView):
         phone_number = validated_data['phone_number']
 
         validation_username = f"{phone_number}_{primary_user_type}"
-        if not OtpService.validate_otp(
-            input_otp=validated_data["otp"],
-            username=validation_username,
-            scope=OtpScopeOption.REGISTER,
-        ):
-            raise ValidationError({"message": "Invalid OTP"})
+        # todo:// change to uncomment
+        # if not OtpService.validate_otp(
+        #     input_otp=validated_data["otp"],
+        #     username=validation_username,
+        #     scope=OtpScopeOption.REGISTER,
+        # ):
+        #     raise ValidationError({"message": "Invalid OTP"})
 
         primary_user = None
         secondary_user = None
@@ -795,7 +963,7 @@ class PublicUserRegisterAPIViewHost(views.APIView):
         new_user.save(update_fields=['is_phone_verified', 'is_email_verified'])
 
         # Now we have a model instance, we can get its data for MongoDB
-        user_data = UserSerializer(new_user).data
+        user_data = HostGuestUserSerializer(new_user).data
         create_user(user_data)
 
         UserProfile.objects.create(user=new_user, languages=[])

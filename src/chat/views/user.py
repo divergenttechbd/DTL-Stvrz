@@ -206,9 +206,7 @@ class UserChatApiView(views.APIView):
             get_cache(key=f"user_mobile_logged_in_{to_user.username}"),
             "----------------------------",
         )
-        if host_device_token and get_cache(
-            key=f"user_mobile_logged_in_{to_user.username}"
-        ):
+        if host_device_token:
             title = "Inquiry Message"
             body = f"You've got a new inquiry from {request.user.get_full_name()}"
             data = {

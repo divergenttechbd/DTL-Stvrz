@@ -16,4 +16,5 @@ def get_user_with_profile(user: User) -> dict:
         "languages": user.userprofile.languages,
         "address": user.userprofile.address,
         "phone_number": user.phone_number,
+        "current_superhost_tier": user.current_superhost_tier,
     }

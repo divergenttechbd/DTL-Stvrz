@@ -19,7 +19,7 @@ from configurations.models import ServiceCharge
 from listings.filters import PublicListingFilter
 from listings.models import Amenity, Category, Listing
 
-from listings.serializers import ListingSerializer, ListingAmenitySerializer
+from listings.serializers import ListingSerializer, ListingAmenitySerializer, ListingSerializerM
 from listings.utils import get_user_with_profile
 from listings.views.service import ListingCalendarDataProcess, ListingCheckoutCalculate
 from myproject import settings
@@ -80,7 +80,7 @@ class SimpleRandomPriorityAPIView(ListAPIView):
     Each API call will prioritize one of: New, Popular, or Superhost properties
     """
     permission_classes = (AllowAny,)
-    serializer_class = ListingSerializer
+    serializer_class = ListingSerializerM
     filterset_class = PublicListingFilter
     swagger_tags = ["Public Listings"]
 
@@ -404,9 +404,9 @@ class PublicListingConfigurationListApiView(views.APIView):
     swagger_tags = ["Public Listings"]
 
     def get(self, request, *args, **kwargs):
-        categories = list(Category.objects.filter().values("id", "name", "icon"))
+        categories = list(Category.objects.filter().values("id", "name", "icon", "icon_mobile"))
         amenity_data = list(
-            Amenity.objects.filter().values("a_type", "id", "name", "icon")
+            Amenity.objects.filter().values("a_type", "id", "name", "icon", "icon_mobile")
         )
 
         amenity_list_dict = dict()

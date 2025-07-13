@@ -20,6 +20,7 @@ logger = get_task_logger(__name__)
 @shared_task(name="myproject.payments.booking_confirmed_process")
 def booking_confirmed_process(booking_id: str) -> None:
     booking = Booking.objects.get(id=booking_id)
+    print(" ------------------------------------ ssl done -------------------------")
 
     guest = booking.guest
     host = booking.host
@@ -149,11 +150,10 @@ def booking_confirmed_process(booking_id: str) -> None:
         booking.save()
 
         send_notification(notification_data=notification_data)
+        print(" --------------- send pre --------------")
 
         host_device_token = FCMToken.objects.filter(user_id=booking.host_id).first()
-        if host_device_token and get_cache(
-            key=f"user_mobile_logged_in_{booking.host.username}"
-        ):
+        if host_device_token :
             title = "Booking Message"
             body = f"Congratulations ! A guest booked your property just now"
             data = {
@@ -165,9 +165,7 @@ def booking_confirmed_process(booking_id: str) -> None:
             )
 
         guest_device_token = FCMToken.objects.filter(user_id=booking.guest_id).first()
-        if guest_device_token and get_cache(
-            key=f"user_mobile_logged_in_{booking.guest.username}"
-        ):
+        if guest_device_token :
             title = "Booking Message"
             body = f"Congratulations ! You’ve successfully completed your booking"
             data = {
@@ -177,3 +175,4 @@ def booking_confirmed_process(booking_id: str) -> None:
             send_fcm_notification_without_task(
                 guest_device_token.token, title, body, data
             )
+

@@ -12,6 +12,11 @@ PLACE_TYPE_ICON_MAPPING = {
     "single_room": f"{HOST}/icons/privacy_types/Room.svg",
     "shared_room": f"{HOST}/icons/privacy_types/SharedRoom.svg",
 }
+PLACE_TYPE_ICON_MOBILE_MAPPING = {
+    "entire_place": f"https://d26o11dgjud8ta.cloudfront.net/icons/privacy_types/69dad81d1fa842498519d4e4106596e5-full.png",
+    "single_room": f"{HOST}/icons/privacy_types/Room.svg",
+    "shared_room": f"https://d26o11dgjud8ta.cloudfront.net/icons/privacy_types/00defb1030684a36abf9677abe7c1a8e-shared.png",
+}
 
 PLACE_TYPE_DESCRIPTION_MAPPING = {
     "entire_place": "Guests have the whole place to themselves",
