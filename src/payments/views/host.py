@@ -422,12 +422,12 @@ class HostFinanceReportAPIView(views.APIView):
 
         # Host pay_out from bookings with check_in in last 30 days
         report_data["insights"]["last_30_days_booking_value"] = Booking.objects.filter(
-            host=host,
-            status__in=[BookingStatusOption.CONFIRMED],
-            check_in__range=[today - timedelta(days=30), today]
+        host=host,
+        status__in=[BookingStatusOption.CONFIRMED],
+        check_in__range=[today - timedelta(days=30), today]
         ).aggregate(
             value=Coalesce(
-                Sum('price', output_field=DecimalField(max_digits=14, decimal_places=2)),
+                Cast(Sum('price'), DecimalField(max_digits=14, decimal_places=2)),
                 Decimal('0.00')
             )
         )['value']

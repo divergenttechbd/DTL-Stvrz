@@ -46,20 +46,20 @@ class DefaultRenderer(JSONRenderer):
     def render(self, data, accepted_media_type=None, renderer_context=None):
         response: Response = renderer_context["response"]
         response_data = {"success": (response.status_code // 100) not in (4, 5)}
-        data = data if not isinstance(data, type(None)) else {}
+        data = data if data is not None else {}
 
         response_data["status_code"] = response.status_code
         response_data["message"] = (
             data.get("message")
             if isinstance(data, dict) and data.get("message")
-            else STATUS_MESSAGES[response.status_code]
+            else STATUS_MESSAGES.get(response.status_code, "Unknown Status")
         )
+
         if response_data.get("success"):
             if "meta_data" in data or "data" in data:
                 response_data.update(data)
             else:
                 response_data["data"] = data
-
         else:
             if "details" in data:
                 response_data["errors"] = {"non_field_errors": [data["details"]]}
@@ -73,11 +73,31 @@ class DefaultRenderer(JSONRenderer):
                 errors = []
                 if isinstance(data, list):
                     for item in data:
-                        errors.append({list(item)[0]: list(item.values())[0][0]})
+                        try:
+                            key = list(item.keys())[0]
+                            val = item[key]
+                            if isinstance(val, (list, tuple)):
+                                errors.append({key: val[0]})
+                            else:
+                                errors.append({key: val})
+                        except Exception:
+                            errors.append(item)
                 elif isinstance(data, dict):
                     for key, value in data.items():
-                        errors.append({key: value[0]})
+                        if isinstance(value, (list, tuple)):
+                            errors.append({key: value[0]})
+                        elif isinstance(value, dict):
+                            nested_errors = []
+                            for sub_key, sub_value in value.items():
+                                if isinstance(sub_value, (list, tuple)):
+                                    nested_errors.append({sub_key: sub_value[0]})
+                                else:
+                                    nested_errors.append({sub_key: sub_value})
+                            errors.append({key: nested_errors})
+                        else:
+                            errors.append({key: value})
                 response_data["errors"] = {"field_errors": errors}
+
         return super().render(response_data, accepted_media_type, renderer_context)
 
 
