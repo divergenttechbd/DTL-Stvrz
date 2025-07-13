@@ -48,6 +48,7 @@ class AuthMiddleware:
                         status=400,
                     )
                 user_obj = self.get_user(data=payload)
+                print(user_obj)
                 if not user_obj:
                     return JsonResponse(
                         data={
