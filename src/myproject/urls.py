@@ -9,6 +9,7 @@ from drf_yasg.views import get_schema_view
 from myproject.settings import STATIC_ROOT, STATIC_URL, MEDIA_ROOT, MEDIA_URL
 from rest_framework import permissions
 
+from myproject.wellknown import assetlinks_view
 from quick_reply.views import QuickReplyListCreateAPIView
 
 schema_view = get_schema_view(
@@ -24,6 +25,7 @@ schema_view = get_schema_view(
 )
 
 v1_patterns = [
+
     path("accounts/", include("accounts.urls", namespace="accounts.apis")),
     path("listings/", include("listings.urls", namespace="listings.apis")),
     path("maps/", include("maps.urls", namespace="maps.apis")),
@@ -50,6 +52,7 @@ v1_patterns = [
 ]
 
 urlpatterns = [
+    path('.well-known/assetlinks.json', assetlinks_view, name='assetlinks'),
     path("", health_check),
     path("api/", include([path("v1/", include(v1_patterns))])),
     path("admin/", admin.site.urls),
