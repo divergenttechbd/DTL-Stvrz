@@ -53,6 +53,7 @@ class Category(BaseModel):
     name = models.CharField(max_length=200)
     icon = models.CharField(max_length=255)
     icon_mobile = models.CharField(max_length=255, null=True, blank=True)
+    status = models.BooleanField(default=False, null=True, blank=True)
 
     class Meta:
         verbose_name = "Listing Category"
@@ -67,6 +68,7 @@ class Amenity(BaseModel):
     a_type = models.CharField(max_length=20, choices=AmenityTypeOption.choices)
     icon = models.CharField(max_length=255)
     icon_mobile = models.CharField(max_length=255, null=True, blank=True)
+    status = models.BooleanField(default=False, null=True, blank=True)
 
     class Meta:
         verbose_name = "Listing Amenity"
