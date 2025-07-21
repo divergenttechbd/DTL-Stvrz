@@ -60,7 +60,6 @@ class UserProfileRetrieveUpdateAPIView(APIView):
         user = self.request.user
         user_data = HostGuestUserSerializer(user).data
 
-
         user_data["profile"] = (
             UserProfileSerializer(request.user.userprofile).data
             if hasattr(request.user, "userprofile")
@@ -87,8 +86,7 @@ class UserProfileRetrieveUpdateAPIView(APIView):
                 fields=["title", "address", "cover_photo", "avg_rating", "unique_id", "price", "id"],
             ).data
 
-            print(" ----------- >>> ", user_data)
-
+        # --- MODIFICATION FOR CO-HOST AND BACKWARD COMPATIBILITY STARTS HERE ---
         with connect_mongo() as collections:
             mongo_user = collections["User"].find_one({"username": user.username})
 
@@ -96,44 +94,52 @@ class UserProfileRetrieveUpdateAPIView(APIView):
             total_unread_msg_count = 0
 
             if mongo_user:
-                # If user is found in Mongo, get their ID and calculate unread messages
                 mongo_user_id_obj = mongo_user["_id"]
                 mongo_user_id_str = str(mongo_user_id_obj)
 
-                # Determine query based on user type (guest or host) to find chat rooms
-                if mongo_user.get("u_type") == "guest":
-                    user_all_room_cursor = collections["ChatRoom"].find(
-                        {"from_user.$id": mongo_user_id_obj}
-                    )
-                else:
-                    user_all_room_cursor = collections["ChatRoom"].find(
-                        {"to_user.$id": mongo_user_id_obj}
-                    )
+                # 1. Backward-compatible query to find all rooms the user is in.
+                user_all_room_cursor = collections["ChatRoom"].find({
+                    "$or": [
+                        {"from_user.$id": mongo_user_id_obj},  # User is the guest
+                        {"to_user.$id": mongo_user_id_obj},  # User is the host in an OLD 1-to-1 chat
+                        {"to_user": {"$elemMatch": {"$id": mongo_user_id_obj}}}
+                        # User is a host in a NEW group chat list
+                    ]
+                })
 
-                # Iterate through chat rooms to count unread messages
+                # 2. Iterate through rooms and handle both data structures.
                 for room in user_all_room_cursor:
-                    # Find the ID of the *other* person in the chat room
-                    other_user_id = (
-                        room["from_user"].id
-                        if mongo_user_id_obj == room["to_user"].id
-                        else room["to_user"].id
-                    )
-                    # Count messages from the other user that are unread
-                    individual_chat_room_msg_count = collections["Message"].count_documents({
-                        "chat_room.$id": room["_id"],
-                        "user.$id": other_user_id,
-                        "is_read": False,
-                    })
-                    if individual_chat_room_msg_count > 0:
-                        total_unread_msg_count += 1
+                    other_user_ids = []
+                    is_current_user_the_guest = mongo_user_id_obj == room["from_user"].id
+
+                    if is_current_user_the_guest:
+                        # If current user is the guest, the "others" are the hosts.
+                        to_user_field = room.get("to_user")
+                        if isinstance(to_user_field, list):
+                            # New group chat structure
+                            other_user_ids.extend([user.id for user in to_user_field])
+                        elif to_user_field:  # Old 1-to-1 chat
+                            other_user_ids.append(to_user_field.id)
+                    else:
+                        # If current user is a host, the "other" is always the guest.
+                        other_user_ids.append(room["from_user"].id)
+
+                    # 3. Count unread messages from any of the "other" users.
+                    if other_user_ids:
+                        individual_chat_room_msg_count = collections["Message"].count_documents({
+                            "chat_room.$id": room["_id"],
+                            "user.$id": {"$in": other_user_ids},  # Use $in to check against the list of other IDs
+                            "is_read": False,
+                        })
+                        if individual_chat_room_msg_count > 0:
+                            total_unread_msg_count += 1
             else:
-                # Log a warning if a Django user doesn't have a corresponding Mongo document
                 print(f"Warning: User '{user.username}' not found in MongoDB during profile retrieval.")
 
-            # Add the mongo ID and unread count to the final response
             user_data["mongo_user_id"] = mongo_user_id_str
             user_data["unread_message_count"] = total_unread_msg_count
-            # user_data["mongo_user_id"] = mongo_user_id
+        # --- MODIFICATION ENDS HERE ---
+
         return Response(data=user_data, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
