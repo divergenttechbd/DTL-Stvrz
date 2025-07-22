@@ -199,6 +199,26 @@ class HostListingRetrieveUpdateAPIView(RetrieveUpdateAPIView):
         )
 
 
+class HostListingHardDeleteAPIView(views.APIView):
+    permission_classes = (IsAuthenticated, IsPrimaryHostOrActiveCoHost,)  # Restrict to superusers only
+    swagger_tags = ["Host Listings"]
+
+    def delete(self, request, pk, *args, **kwargs):
+        try:
+            instance = Listing.all_objects.get(pk=pk)
+            instance.hard_delete()
+            return Response(
+                {"message": "Listing has been permanently deleted."},
+                status=status.HTTP_200_OK
+            )
+        except Listing.DoesNotExist:
+            return Response(
+                {"message": "Listing not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+
+
 class HostListingCalendarApiView(views.APIView):
     permission_classes = (IsAuthenticated, IsPrimaryHostOrActiveCoHost)
 
