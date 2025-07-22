@@ -25,6 +25,7 @@ async def get_chat_rooms(
     params: QueryParam = Depends(CommonParam(filter_fields=["name"])),
 ) -> Any:
     current_user = request.state.user
+    print(current_user, " --- ")
     return await chat_service.get_chat_rooms(
         query_param=params, current_user=current_user
     )

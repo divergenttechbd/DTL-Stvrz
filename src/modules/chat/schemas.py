@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta
 import pytz
-from typing import Optional
+from typing import Optional, Union
 from beanie.odm.fields import PydanticObjectId
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from src.core.helpers.enum import ChatRoomStatus, MessageTypeEnum, RoomStatusEnum
 
 from src.modules.users.schemas import UserLiteBase
@@ -32,7 +32,8 @@ class ChatRoomResponse(BaseModel):
     id: PydanticObjectId
     name: str
     from_user: UserLiteBase
-    to_user: UserLiteBase
+    # to_user:  UserLiteBase
+    to_user: Union[UserLiteBase, list[UserLiteBase]]
     status: ChatRoomStatus
     latest_message: LatestMessage
     booking_data: dict
@@ -42,6 +43,20 @@ class ChatRoomResponse(BaseModel):
 
     class Config:
         from_attributes = True
+    #
+    # @model_validator(mode='before')
+    # @classmethod
+    # def unify_to_user_field(cls, data: any) -> any:
+    #
+    #     if isinstance(data, dict):
+    #         to_user_field = data.get('to_user')
+    #         if to_user_field:
+    #             if not isinstance(to_user_field, list):
+    #                 data['to_user'] = [to_user_field]
+    #
+    #         if 'to_user' in data:
+    #             data['to_user'] = data.pop('to_user')
+    #     return data
 
 
 class ChatRoomMessageResponse(BaseModel):

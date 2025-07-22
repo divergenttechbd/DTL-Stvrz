@@ -1,7 +1,8 @@
 import json
+from enum import Enum
 from typing import Any
 import anyio
-from beanie import PydanticObjectId
+from beanie import PydanticObjectId, Link
 from bson import ObjectId
 
 from datetime import datetime, timedelta
@@ -199,15 +200,19 @@ def is_contact_info_present(message: str) -> bool:
         return True
 
     return False
+
+
 def custom_encoder(obj):
+    if hasattr(obj, 'model_dump'):
+        return obj.model_dump()
     if isinstance(obj, (ObjectId, PydanticObjectId)):
         return str(obj)
-    elif isinstance(obj, BaseModel):
-        return obj.model_dump()
-    elif isinstance(obj, datetime):
+    if isinstance(obj, datetime):
         return obj.isoformat()
-    else:
-        raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+    if isinstance(obj, Enum):
+        return obj.value
+    # This will catch any other types that are not serializable
+    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 
 @router.websocket("/user-global-room/")
@@ -217,6 +222,7 @@ async def websocket_user_global_room_endpoint(
 ) -> None:
     await websocket.accept()
     current_user = websocket.state.user
+    print(current_user, " current user ")
 
     all_partners = await chat_service.get_user_all_room_partner(
         current_user=current_user
@@ -234,6 +240,7 @@ async def websocket_user_global_room_endpoint(
                 default=custom_encoder,
             ),
         )
+        print(" ======== ", partner_id)
 
     await chat_service.update_user_last_seen(
         current_user=current_user, online_status=True
@@ -264,14 +271,14 @@ async def user_global_room_ws_receiver(
 ):
     try:
         while True:
+            print(" -- re - ")
             message = await websocket.receive_text()
+            print(" === X ===")
+            print(message, current_user.id, " ========= while ==== ")
             await broadcast.publish(
                 channel=f"user_global_room_{current_user.id}", message=message
             )
-            # async for message in websocket.iter_text():
-            #     await broadcast.publish(
-            #         channel=f"user_global_room_{current_user_id}", message=message
-            #     )
+
     except WebSocketDisconnect:
         await chat_service.update_user_last_seen(
             current_user=current_user, online_status=False
@@ -355,7 +362,6 @@ async def websocket_endpoint(
     chat_service: ChatService = Depends(Container().get_chat_service),
 ) -> None:
     await websocket.accept()
-
     current_user = websocket.state.user
 
     chat_room, has_access = await chat_service.check_user_has_room_permission(
@@ -364,12 +370,14 @@ async def websocket_endpoint(
     if not has_access or not chat_room:
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
 
-    async with anyio.create_task_group() as task_group:
+    # Explicitly fetch all nested links to prevent errors in the receiver task
+    await chat_room.fetch_all_links()
 
+    async with anyio.create_task_group() as task_group:
         async def run_chatroom_ws_receiver() -> None:
             await chatroom_ws_receiver(
                 websocket=websocket,
-                current_user=websocket.state.user,
+                current_user=current_user,
                 chat_room=chat_room,
                 chat_service=chat_service,
             )
@@ -385,176 +393,195 @@ async def chatroom_ws_receiver(
     chat_room: ChatRoom,
     chat_service: ChatService,
 ) -> None:
+    print(" =====>>><<<====")
+    all_participants_ids = []
+
+    # Safely add the guest's ID
+    if chat_room.from_user:
+        all_participants_ids.append(chat_room.from_user.id)
+        print(all_participants_ids)
+
+    # Safely handle the hosts/co-hosts
+    if isinstance(chat_room.to_user, list):
+        for user_link in chat_room.to_user:
+            user = await user_link.fetch() if isinstance(user_link, Link) else user_link
+            if user:
+                all_participants_ids.append(user.id)
+    elif isinstance(chat_room.to_user, User):
+        if chat_room.to_user:
+            all_participants_ids.append(chat_room.to_user.id)
+
+    other_participants_ids = [pid for pid in all_participants_ids if pid != current_user.id]
+
+    print(" ================= >>> ")
     try:
         while True:
             message = await websocket.receive_text()
+
             try:
                 body: dict[Any, Any] = json.loads(message)
-                other_user_id = (
-                    chat_room.from_user.id
-                    if current_user.id == chat_room.to_user.id
-                    else chat_room.to_user.id
-                )
-                other_user_type = (
-                    UserTypeOption.GUEST
-                    if current_user.u_type == UserTypeOption.HOST
-                    else UserTypeOption.HOST
-                )
-                if body["action"] == "message":
-                    # body["user"] = current_user.id
+            except json.JSONDecodeError:
+                print(f"WARNING: Received non-JSON message, ignoring: '{message}'")
+                continue
 
-                    user_message_content = body.get("message", "")
-                    if is_contact_info_present(user_message_content):
-                        print(" ----------------- ")
-                        error_payload = {
-                            "action": "error",
-                            "type": "forbidden_content",
-                            "detail": "Sharing contact information (email or phone number) is not allowed."
-                        }
-                        await websocket.send_text(json.dumps(error_payload))
-                        continue
-
-                    if chat_room.status == RoomStatusEnum.CLOSED:
-                        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
-
+            try:
+                if body.get("action") == "message":
                     saved_message = await chat_service.save_message(
-                        data=body, chat_room=chat_room, current_user=current_user
-                    )
-                    body["user"] = str(current_user.id)
-                    await broadcast.publish(
-                        channel=str(chat_room.id), message=json.dumps(body)
+                        data=body,
+                        chat_room=chat_room,
+                        current_user=current_user
                     )
 
-                    chat_room_dict = ChatRoomResponse(
-                        **chat_room.model_dump()
-                    ).model_dump()
-                    body["room"] = chat_room_dict
-                    body["user"] = UserLiteBase(
-                        **current_user.model_dump()
-                    ).model_dump()
-                    body["id"] = str(saved_message.id)
-                    body["created_at"] = str(saved_message.created_at)
-                    # str(
-                    #     saved_message.created_at + timedelta(hours=6)
-                    # )
-                    await broadcast.publish(
-                        channel=f"user_global_room_{other_user_id}",
-                        message=json.dumps(body, default=custom_encoder),
-                    )
-                    await broadcast.publish(
-                        channel=f"user_global_room_{str(current_user.id)}",
-                        message=json.dumps(body, default=custom_encoder),
-                    )
-
-                    await broadcast.publish(
-                        channel=f"chat_stat_{str(other_user_id)}",
-                        message=json.dumps(
-                            {
-                                "count": await chat_service.get_user_unread_message_count(
-                                    user_id=other_user_id, u_type=other_user_type
-                                )
-                            }
-                        ),
-                    )
-
-                    chat_room_other_user = await chat_service.get_by_id(
-                        id=other_user_id
-                    )
-
-                    if (
-                        chat_room_other_user.fcm_token
-                        and not chat_room_other_user.online_status
-                        and await Cache.get(
-                            key=f":1:user_mobile_logged_in_{chat_room_other_user.username}"
-                        )
-                    ):
-                        fcm_title = "New Message"
-                        fcm_body = "You've got a new message"
-                        fcm_data = {
-                            "key1": "value1",
-                            "url": (
-                                f"/host-dashboard/inbox?conversation_id={str(chat_room.id)}"
-                                if chat_room_other_user.u_type == UserTypeOption.HOST
-                                else f"/messages?conversation_id={str(chat_room.id)}"
-                            ),
-                        }
-                        send_fcm_notification(
-                            chat_room_other_user.fcm_token,
-                            fcm_title,
-                            fcm_body,
-                            fcm_data,
-                        )
-
-                elif body["action"] == "is_read":
-                    await chat_service.update_chat_room_message(
-                        chat_room=chat_room, other_user_id=other_user_id
-                    )
-                    await broadcast.publish(
-                        channel=f"user_global_room_{other_user_id}",
-                        message=json.dumps(
-                            {"action": "read_done", "room_id": str(chat_room.id)}
-                        ),
-                    )
-
-                    await broadcast.publish(
-                        channel=f"chat_stat_{str(current_user.id)}",
-                        message=json.dumps(
-                            {
-                                "count": await chat_service.get_user_unread_message_count(
-                                    user_id=current_user.id, u_type=current_user.u_type
-                                )
-                            }
-                        ),
-                    )
-                elif body["action"] in ["inquiry", "confirmed"]:
-                    number_of_message = 2 if body["action"] == "inquiry" else 1
-
-                    (
-                        messages,
-                        total_messages,
-                    ) = await chat_service.get_latest_message(
-                        chat_room=chat_room, number_of_message=number_of_message
-                    )
-                    data = {
-                        "messages": messages,
-                        "action_type": body["action"],
-                        "is_new_chatroom": total_messages < number_of_message,
+                    simple_payload = {
+                        "action": "message",
+                        "user": str(current_user.id),
+                        "message": body.get("message", ""),
+                        "id": str(saved_message.id),
+                        "created_at": str(saved_message.created_at)
                     }
                     await broadcast.publish(
-                        channel=f"user_global_room_{other_user_id}",
-                        message=json.dumps(
-                            data,
-                            default=custom_encoder,
-                        ),
+                        channel=str(chat_room.id),
+                        message=json.dumps(simple_payload)
                     )
-                    await broadcast.publish(
-                        channel=f"chat_stat_{str(other_user_id)}",
-                        message=json.dumps(
-                            {
-                                "count": await chat_service.get_user_unread_message_count(
-                                    user_id=other_user_id, u_type=other_user_type
-                                )
-                            }
-                        ),
-                    )
-                else:
-                    await broadcast.publish(
-                        channel=f"user_global_room_{other_user_id}",
-                        message=json.dumps(body),
-                    )
+
+                    # --- FIXED SERIALIZATION ---
+                    # 1. Manually serialize chat room to avoid model_dump issues with Link lists
+                    try:
+                        chat_room_data = {
+                            "id": str(chat_room.id),
+                            "name": chat_room.name,
+                            "status": chat_room.status.value if hasattr(chat_room.status, 'value') else str(
+                                chat_room.status),
+                            "listing": chat_room.listing,
+                            "booking_data": chat_room.booking_data,
+                            "latest_message": chat_room.latest_message,
+                            "created_at": chat_room.created_at.isoformat() if chat_room.created_at else None,
+                            "updated_at": chat_room.updated_at.isoformat() if chat_room.updated_at else None,
+                        }
+
+                        # Handle from_user Link
+                        if chat_room.from_user:
+                            if hasattr(chat_room.from_user, 'id'):
+                                chat_room_data["from_user"] = str(chat_room.from_user.id)
+                            else:
+                                chat_room_data["from_user"] = str(chat_room.from_user)
+
+                        # Handle to_user (can be single Link or list of Links)
+                        if chat_room.to_user:
+                            if isinstance(chat_room.to_user, list):
+                                # It's a list of Links
+                                to_user_ids = []
+                                for user_link in chat_room.to_user:
+                                    if hasattr(user_link, 'id'):
+                                        to_user_ids.append(str(user_link.id))
+                                    else:
+                                        to_user_ids.append(str(user_link))
+                                chat_room_data["to_user"] = to_user_ids
+                            else:
+                                # It's a single Link
+                                if hasattr(chat_room.to_user, 'id'):
+                                    chat_room_data["to_user"] = [str(chat_room.to_user.id)]
+                                else:
+                                    chat_room_data["to_user"] = [str(chat_room.to_user)]
+                        else:
+                            chat_room_data["to_user"] = []
+
+                    except Exception as room_err:
+                        print(f"Error serializing chat room: {room_err}")
+                        # Fallback to basic room info
+                        chat_room_data = {
+                            "id": str(chat_room.id),
+                            "name": getattr(chat_room, 'name', ''),
+                            "status": str(getattr(chat_room, 'status', '')),
+                            "listing": getattr(chat_room, 'listing', {}),
+                            "booking_data": getattr(chat_room, 'booking_data', {}),
+                            "latest_message": getattr(chat_room, 'latest_message', {}),
+                            "created_at": str(getattr(chat_room, 'created_at', '')),
+                            "updated_at": str(getattr(chat_room, 'updated_at', '')),
+                            "from_user": str(getattr(chat_room.from_user, 'id', '')) if chat_room.from_user else None,
+                            "to_user": []
+                        }
+
+                    # 3. Create user data safely - manually build UserLiteBase compatible dict
+                    try:
+                        # Manually extract fields that UserLiteBase expects
+                        user_data = {}
+
+                        # Required fields
+                        user_data["id"] = current_user.id  # Keep as PydanticObjectId, don't convert to string
+                        user_data["username"] = getattr(current_user, 'username', '')
+                        user_data["full_name"] = getattr(current_user, 'full_name', '')
+                        user_data["user_id"] = getattr(current_user, 'user_id', 0)
+
+                        # Optional fields
+                        user_data["email"] = getattr(current_user, 'email', None)
+                        user_data["image"] = getattr(current_user, 'image', None)
+                        user_data["phone_number"] = getattr(current_user, 'phone_number', None)
+                        user_data["last_online"] = getattr(current_user, 'last_online', None)
+                        user_data["online_status"] = getattr(current_user, 'online_status', False)
+
+                        # Create UserLiteBase instance and serialize it
+                        user_lite = UserLiteBase(**user_data)
+                        serialized_user = user_lite.model_dump()
+
+                    except Exception as user_err:
+                        print(f"Error serializing user data: {user_err}")
+                        print(f"Current user attributes: {dir(current_user)}")
+                        # Fallback to basic user info
+                        serialized_user = {
+                            "id": str(current_user.id),
+                            "username": getattr(current_user, 'username', 'Unknown'),
+                            "full_name": getattr(current_user, 'full_name', ''),
+                            "user_id": getattr(current_user, 'user_id', 0),
+                            "email": getattr(current_user, 'email', None),
+                            "image": getattr(current_user, 'image', None),
+                            "phone_number": getattr(current_user, 'phone_number', None),
+                            "last_online": getattr(current_user, 'last_online', None),
+                            "online_status": getattr(current_user, 'online_status', False)
+                        }
+
+                    # 4. Build the final payload using only basic Python types
+                    global_room_payload = {
+                        "action": "message",
+                        "id": str(saved_message.id),
+                        "created_at": str(saved_message.created_at),
+                        "user": serialized_user,  # Use the safely serialized user
+                        "room": chat_room_data,
+                        "message": body.get("message"),
+                    }
+
+                    # 5. Convert to JSON string with custom encoder
+                    message_to_broadcast = json.dumps(global_room_payload, default=custom_encoder)
+
+                    # 6. Broadcast to all participants
+                    all_subscribers_to_notify = [str(current_user.id)] + [str(pid) for pid in other_participants_ids]
+                    for user_id in all_subscribers_to_notify:
+                        await broadcast.publish(
+                            channel=f"user_global_room_{user_id}",
+                            message=message_to_broadcast,
+                        )
+
+                # Handle other actions here...
+                # elif body.get("action") == "other_action":
+                #     pass
+
             except Exception as err:
-                print(err, "-")
+                print(f"ERROR processing valid JSON message: {err}")
+                import traceback
+                traceback.print_exc()  # This will help you debug further issues
+
     except WebSocketDisconnect:
-        await broadcast.publish(
-            channel=f"user_global_room_{other_user_id}",
-            message=json.dumps(
-                {"message": f"{current_user.username} leave the chat"},
-                default=custom_encoder,
-            ),
-        )
+        for participant_id in other_participants_ids:
+            await broadcast.publish(
+                channel=f"user_global_room_{participant_id}",
+                message=json.dumps({
+                    "message": f"{current_user.username} left the chat",
+                    "room_id": str(chat_room.id)
+                }, default=custom_encoder),
+            )
 
 
 async def chatroom_ws_sender(websocket: WebSocket, room_id: str) -> None:
     async with broadcast.subscribe(channel=room_id) as subscriber:
-        async for event in subscriber:  # type: ignore
+        async for event in subscriber:
             await websocket.send_text(event.message)

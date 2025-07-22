@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 from beanie import Document, Insert, Link, Replace, SaveChanges, Update, before_event
 from pydantic import Field
 from src.core.helpers.utils import get_current_datetime
@@ -12,7 +12,8 @@ from src.modules.users.models import User
 class ChatRoom(Document):
     name: str
     from_user: Link[User]
-    to_user: Link[User]
+    # to_user: Link[User]
+    to_user: Union[Link[User], list[Link[User]]]
     status: ChatRoomStatus
     listing: dict = {}
     booking_data: dict = {}

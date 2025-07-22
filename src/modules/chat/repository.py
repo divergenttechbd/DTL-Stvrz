@@ -1,6 +1,7 @@
 from datetime import datetime
-from beanie import PydanticObjectId
+from beanie import PydanticObjectId, Link
 import beanie
+from beanie.odm.operators.find.comparison import In
 from bson import ObjectId
 import pymongo
 from beanie.odm.operators.find.logical import Or
@@ -27,14 +28,18 @@ class ChatRepository(BaseRepository):
     ) -> tuple[list[ChatRoom], int]:
         offset = (param.page - 1) * param.offset_limit
         limit = param.limit
-        data = (
-            await ChatRoom.find(
-                *filter_param, limit=limit, skip=offset, fetch_links=True
-            )
-            .sort(sorting)
-            .to_list()
-        )
-        total_count = await ChatRoom.find(*filter_param).count()
+
+        if isinstance(filter_param, dict):
+            # If it's a raw dictionary, pass it directly without unpacking.
+            query = ChatRoom.find(filter_param, fetch_links=True)
+            count_query = ChatRoom.find(filter_param)
+        else:
+            # Otherwise, assume it's a tuple/list of Beanie expressions and unpack it.
+            query = ChatRoom.find(*filter_param, fetch_links=True)
+            count_query = ChatRoom.find(*filter_param)
+
+        data = await query.sort(sorting).skip(offset).limit(limit).to_list()
+        total_count = await count_query.count()
         return data, total_count
 
     async def get_room_messages(
@@ -169,49 +174,46 @@ class ChatRepository(BaseRepository):
     async def count_user_unread_message(
         self, user_id: str, u_type: UserTypeOption, is_read: bool = False
     ) -> int:
-        if u_type == UserTypeOption.GUEST:
-            user_all_chat_room = await ChatRoom.find(
-                ChatRoom.from_user.id == PydanticObjectId(user_id)
-            ).to_list()
-        else:
-            user_all_chat_room = await ChatRoom.find(
-                ChatRoom.to_user.id == PydanticObjectId(user_id)
-            ).to_list()
+        user_obj_id = PydanticObjectId(user_id)
 
-        # print(len(user_all_chat_room), "----------user_all_chat_room--------")
+        # Reuse the backward-compatible filter from the service layer
+        if u_type == UserTypeOption.GUEST:
+            filter_expression = (ChatRoom.from_user.id == user_obj_id,)
+        else:  # HOST
+            filter_expression = (
+                Or(
+                    ChatRoom.to_user.id == user_obj_id,
+                    In(ChatRoom.to_user.id, [user_obj_id])
+                ),
+            )
+
+        user_all_chat_room = await ChatRoom.find(*filter_expression, fetch_links=True).to_list()
 
         total_unread_msg_count = 0
         for room in user_all_chat_room:
-            # if is_read:
-            #     other_user_id = room.from_user.to_dict()["id"]
-            # else:
-            # other_user_id = (
-            #     room.from_user.to_dict()["id"]
-            #     if user_id == room.to_user.to_dict()["id"]
-            #     else room.to_user.to_dict()["id"]
-            # )
+            other_user_ids = []
+            # --- BACKWARD-COMPATIBLE LOGIC ---
+            # Determine who the "other" users are based on the room structure
+            if room.from_user.id == user_obj_id:  # If current user is the guest
+                if isinstance(room.to_user, list):
+                    other_user_ids.extend([host.id for host in room.to_user])
+                elif isinstance(room.to_user, Link):
+                    other_user_ids.append(room.to_user.id)
+            else:  # If current user is a host
+                other_user_ids.append(room.from_user.id)
+            # --- END ---
 
-            chat_room_user_ids = [
-                room.from_user.to_dict()["id"],
-                room.to_user.to_dict()["id"],
-            ]
-            other_user_id = (
-                chat_room_user_ids[1]
-                if chat_room_user_ids[0] == str(user_id)
-                else chat_room_user_ids[0]
-            )
+            if not other_user_ids:
+                continue
 
-            # print(other_user_id, chat_room_user_ids, user_id, "----------dddd-------")
+            # Count unread messages sent by any of the "other" users in this room
             individual_chat_room_msg_count = await Message.find(
                 Message.chat_room.id == room.id,
-                Message.user.id == PydanticObjectId(other_user_id),
+                In(Message.user.id, other_user_ids),
                 Message.is_read == False,
             ).count()
-
-            # print(individual_chat_room_msg_count, "--------count")
 
             if individual_chat_room_msg_count > 0:
                 total_unread_msg_count += 1
 
-        # print(total_unread_msg_count, "--------------------------")
         return total_unread_msg_count
