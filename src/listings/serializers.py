@@ -66,6 +66,7 @@ class ListingSerializer(DynamicFieldsModelSerializer):
                 "email",
                 "identity_verification_status",
                 "status",
+                "phone_number"
             ],
         ).data
 
