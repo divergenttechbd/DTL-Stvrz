@@ -2,6 +2,7 @@ import os
 from datetime import datetime, timedelta
 from decimal import InvalidOperation, Decimal
 
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.conf import settings
 from django.db.models import F
@@ -39,6 +40,8 @@ from configurations.models import ServiceCharge
 from listings.models import Listing, ListingCalendar
 from notifications.models import Notification
 from notifications.utils import create_notification, send_notification
+
+User = get_user_model()
 
 from coupons.serializers import CouponValidateSerializer # Request serializer
 class GuestBookingListCreateAPIView(ListCreateAPIView):
@@ -267,9 +270,24 @@ class GuestBookingRetrieveAPIView(views.APIView):
                     "created_at": str(guest_booking_review.created_at),
                 }
         with connect_mongo() as collections:
-            room_name = f"{request.user.username}:{booking.host.username}"
-            chat_room = collections["ChatRoom"].find_one({"name": room_name}) or {}
-            result["chat_room"] = str(chat_room.get("_id"))
+            guest = booking.guest
+            listing = booking.listing
+            main_host = listing.host
+
+            # 1. Gather all hosts (main + co-hosts) for the listing
+            active_co_hosts = User.objects.filter(cohosting_gigs__listing=listing, cohosting_gigs__is_active=True)
+            all_recipients = list(set([main_host] + list(active_co_hosts)))
+
+            # 2. Create the canonical room name, same as in your other tasks/views
+            host_usernames = [user.username for user in all_recipients]
+            sorted_host_usernames = sorted(host_usernames)
+            room_name = f"{guest.username}:{':'.join(sorted_host_usernames)}"
+
+            # 3. Find the chat room using the correct canonical name
+            chat_room = collections["ChatRoom"].find_one({"name": room_name})
+
+            # 4. Add the chat room ID to the result if found
+            result["chat_room"] = str(chat_room.get("_id")) if chat_room else None
         return Response(result, status=status.HTTP_200_OK)
 
 
