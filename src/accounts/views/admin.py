@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import io
 from django.contrib.auth import get_user_model
-from django.db.models import Count, Sum
+from django.db.models import Count, Sum, Q
 from django.conf import settings
 from django.db import transaction
 from django.utils.timezone import now
@@ -463,16 +463,24 @@ class AdminBestSellingHostListAPIView(APIView):
     @swagger_auto_schema(
         manual_parameters=[
             openapi.Parameter(
-                'query_type',
+                'start_date',
                 openapi.IN_QUERY,
-                description="Time filter type: MONTHLY | YEARLY | WEEKLY",
+                description="Filter from this date (format: YYYY-MM-DD)",
                 type=openapi.TYPE_STRING,
-                default="MONTHLY"
+                format=openapi.FORMAT_DATE,
+            ),
+            openapi.Parameter(
+                'end_date',
+                openapi.IN_QUERY,
+                description="Filter up to this date (format: YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+                format=openapi.FORMAT_DATE,
             ),
             openapi.Parameter(
                 'sort_by',
                 openapi.IN_QUERY,
-                description="Field to sort by: total_sell_amount | total_property | first_name | last_name",
+                # --- CHANGE 1: Added 'total_bookings' to the description ---
+                description="Field to sort by: total_sell_amount | total_property | total_bookings | first_name | last_name",
                 type=openapi.TYPE_STRING,
                 default="total_sell_amount"
             ),
@@ -486,52 +494,52 @@ class AdminBestSellingHostListAPIView(APIView):
         ],
         responses={200: "Best selling host list returned"},
     )
-
     def get(self, request, *args, **kwargs):
-        current_month = now().month
-        current_year, current_week, _ = now().isocalendar()
-
-        query_type = request.GET.get("query_type", "MONTHLY")
+        start_date_str = request.GET.get("start_date")
+        end_date_str = request.GET.get("end_date")
         sort_by = request.GET.get("sort_by", "total_sell_amount")
         order = request.GET.get("order", "desc")
 
-        # Validate sort field
-        allowed_sort_fields = ["total_sell_amount", "total_property", "first_name", "last_name"]
+        # --- CHANGE 2: Add 'total_bookings' to the allowed fields ---
+        allowed_sort_fields = ["total_sell_amount", "total_property", "total_bookings", "first_name", "last_name"]
         if sort_by not in allowed_sort_fields:
             return Response(
-                {"error": f"Invalid sort_by field. Allowed fields: {allowed_sort_fields}"},
+                {"error": f"Invalid sort_by field. Allowed fields: {', '.join(allowed_sort_fields)}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Apply ordering
         sort_order = f"-{sort_by}" if order.lower() == "desc" else sort_by
 
-        # Base filter
-        filter_params = {"u_type": "host"}
-        if query_type == "MONTHLY":
-            filter_params["updated_at__month"] = current_month
-            filter_params["updated_at__year"] = current_year
-        elif query_type == "YEARLY":
-            filter_params["updated_at__year"] = current_year
-        else:
-            filter_params["updated_at__week"] = current_week
-            filter_params["updated_at__year"] = current_year
+        # --- CHANGE 3: Build a separate filter for bookings ---
+        # This will be used inside the annotation.
+        booking_filter = Q()
+        try:
+            if start_date_str:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
 
-        # Query
-        qs = (
-            User.objects.filter(**filter_params)
-            .only(
-                "id",
-                "username",
-                "first_name",
-                "last_name",
-                "total_sell_amount",
-                "total_property",
+                booking_filter &= Q(host_bookings__created_at__gte=start_date)
+
+            if end_date_str:
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                booking_filter &= Q(host_bookings__created_at__lt=end_date + timedelta(days=1))
+
+        except ValueError:
+            return Response(
+                {"error": "Invalid date format. Please use YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST
             )
+
+
+        qs = (
+            User.objects.filter(u_type="host")
+            .annotate(
+                # Create a new field 'total_bookings' on each User object
+                total_bookings=Count('host_bookings', filter=booking_filter)
+            )
+            .filter(total_bookings__gt=0)  # Optional: Only show hosts who had at least 1 booking in the period
             .order_by(sort_order)[:10]
         )
 
-        # Serialize
         data = UserSerializer(
             qs,
             many=True,
@@ -542,12 +550,11 @@ class AdminBestSellingHostListAPIView(APIView):
                 "last_name",
                 "total_sell_amount",
                 "total_property",
+                "total_bookings",  # Add the new field here
             ],
         ).data
 
         return Response({"data": data}, status=status.HTTP_200_OK)
-
-
 class AdminUserReportDownloadAPIView(APIView):
     permission_classes = (IsStaff,)
     swagger_tags = ["Admin Dashboard"]

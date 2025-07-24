@@ -1,6 +1,6 @@
 import re
 from decimal import Decimal
-
+from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework.serializers import (
@@ -65,6 +65,7 @@ class HostGuestUserSerializer(ModelSerializer):
 
 class UserSerializer(DynamicFieldsModelSerializer):
     full_name = SerializerMethodField()
+    total_bookings = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = User
