@@ -433,7 +433,7 @@ class ListingCoHostSerializer(serializers.ModelSerializer):
     class Meta:
         model = ListingCoHost
         fields = [
-            'id',
+            'listing',
             'listing_details', # Details of the co-hosted listing
             'co_host_user_details', # Details of the assigned co-host
             'access_level',
@@ -573,5 +573,5 @@ class CoHostedListingDetailSerializer(serializers.ModelSerializer):
             'access_level_display',
             'commission_percentage',
             'is_active',
-            'id',
+
         ]

@@ -233,8 +233,8 @@ class ListingCoHost(BaseModel): # Inherits created_at, updated_at
     listing = models.OneToOneField(
         'listings.Listing',
         on_delete=models.CASCADE,
-        related_name='cohost_assignment',  # Singular, as it's a one-to-one link
-        primary_key=True,  # Makes the listing's ID the primary key for this table.
+        related_name='cohost_assignment',
+        primary_key=True,
         help_text="The listing this co-host assignment is for."
     )
     co_host_user = models.ForeignKey( # The user who is the co-host
@@ -287,8 +287,8 @@ class ListingCoHost(BaseModel): # Inherits created_at, updated_at
 
     def save(self, *args, **kwargs):
         # Automatically set primary_host if not provided and if listing is set
-        if not self.primary_host_id and self.listing_id:
-             self.primary_host = self.listing.host
+        # if not self.primary_host_id and self.listing_id:
+        #      self.primary_host = self.listing.host
         # Set a flag to perform the check only if primary_host was part of the instance or data.
         # This avoids error when self.listing.host is not yet available (e.g. during initial creation if listing is not set).
         if self.listing:
