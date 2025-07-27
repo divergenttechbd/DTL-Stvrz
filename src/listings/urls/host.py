@@ -6,7 +6,7 @@ from listings.views.host import (
     HostListingConfigurationApiView,
     HostListingCalendarApiView, ManageListingCoHostsAPIView, PrimaryHostCoHostAssignmentsListView,
     PrimaryHostViewCoHostAssignmentsStatusAPIView, ListCoHostsForListingAPIView, MyCoHostedListingsAPIView,
-    HostListingHardDeleteAPIView,
+    HostListingHardDeleteAPIView, ManageSingleCoHostAssignmentView,
 )
 
 app_name = "host"
@@ -42,6 +42,11 @@ path('my-assignments/cohosting-listings/', MyCoHostedListingsAPIView.as_view(), 
 path('co-hosts/manage-assignments/<int:assignment_id>/', ManageListingCoHostsAPIView.as_view(), name='cohost-manage-single'),
 
     path('listings/<int:pk>/hard-delete/', HostListingHardDeleteAPIView.as_view(), name='host-listing-hard-delete'),
+path(
+        'manage-cohosts/<int:assignment_id>/',
+        ManageSingleCoHostAssignmentView.as_view(),
+        name='cohost_manage_single'
+    ),
 
 ]
 

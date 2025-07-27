@@ -458,33 +458,46 @@ class ManageListingCoHostsAPIView(APIView):
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    # @swagger_auto_schema(
+    #     operation_summary="Remove a Co-host from a Listing",
+    #     operation_description=(
+    #         "Removes a co-host assignment from a specific listing using the assignment's ID (which is the listing_id). "
+    #         "Only the primary host can perform this action."
+    #     ),
+    #     responses={
+    #         204: "Co-host removed successfully.",
+    #         403: "Permission denied.",
+    #         404: "Assignment not found."
+    #     }
+    # )
+    # def delete(self, request, assignment_id, *args, **kwargs):
+    #     """
+    #     Removes a co-host assignment using its ID (listing_id).
+    #     """
+    #     primary_host = request.user
+    #     # The requesting user must be the primary host of the assignment.
+    #     assignment = get_object_or_404(
+    #         ListingCoHost,
+    #         pk=assignment_id,
+    #         primary_host=primary_host
+    #     )
+    #
+    #     assignment.delete()
+    #     return Response(status=status.HTTP_204_NO_CONTENT)
+
+class ManageSingleCoHostAssignmentView(APIView):
+    permission_classes = [IsAuthenticated, IsHostUser]
+    swagger_tags = ["Co-host"]
+
     @swagger_auto_schema(
-        operation_summary="Remove a Co-host from a Listing",
-        operation_description=(
-            "Removes a co-host assignment from a specific listing using the assignment's ID (which is the listing_id). "
-            "Only the primary host can perform this action."
-        ),
-        responses={
-            204: "Co-host removed successfully.",
-            403: "Permission denied.",
-            404: "Assignment not found."
-        }
+
     )
     def delete(self, request, assignment_id, *args, **kwargs):
-        """
-        Removes a co-host assignment using its ID (listing_id).
-        """
+
         primary_host = request.user
-        # The requesting user must be the primary host of the assignment.
-        assignment = get_object_or_404(
-            ListingCoHost,
-            pk=assignment_id,
-            primary_host=primary_host
-        )
-
+        assignment = get_object_or_404(ListingCoHost, pk=assignment_id, primary_host=primary_host)
         assignment.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
+        return Response(data={"message":"success"}, status=status.HTTP_200_OK)
 
 class PrimaryHostCoHostAssignmentsListView(generics.ListAPIView):
     serializer_class = ListingCoHostSerializer
