@@ -499,6 +499,19 @@ async def chatroom_ws_receiver(
 
             try:
                 if body.get("action") == "message":
+
+                    message_content = body.get("message", "")
+
+                    if is_contact_info_present(message_content):
+                        print(f"Message from user {current_user.id} contains contact info and is forbidden.")
+                        forbidden_response = {
+                            "action": "error",
+                            "type": "forbidden",
+                            "message": "Sending contact information is not allowed."
+                        }
+                        await websocket.send_text(json.dumps(forbidden_response, default=custom_encoder))
+                        continue
+
                     saved_message = await chat_service.save_message(
                         data=body,
                         chat_room=chat_room,
@@ -509,20 +522,11 @@ async def chatroom_ws_receiver(
                     simple_payload = {
                         "action": "message",
                         "user": str(current_user.id),
-                        "message": body.get("message", ""),
+                        "message": message_content,
                         "id": str(saved_message.id),
                         "created_at": str(saved_message.created_at)
                     }
 
-                    if is_contact_info_present(simple_payload['message']):
-                        print(f"Message from user {current_user.id} contains contact info and is forbidden.")
-                        forbidden_response = {
-                            "action": "error",
-                            "type": "forbidden",
-                            "message": "Sending contact information is not allowed."
-                        }
-                        await websocket.send_text(json.dumps(forbidden_response, default=custom_encoder))
-                        continue
 
                     await broadcast.publish(
                         channel=str(chat_room.id),
@@ -617,7 +621,7 @@ async def chatroom_ws_receiver(
                         "created_at": str(saved_message.created_at),
                         "user": serialized_user,
                         "room": chat_room_data,
-                        "message": body.get("message"),
+                        "message": message_content,
                     }
 
                     # 4. Convert to JSON string with custom encoder
