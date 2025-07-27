@@ -43,7 +43,27 @@ import re
 from typing import Any
 
 # change p---
+def is_likely_uuid(text: str) -> bool:
+    """
+    Check if a string is likely a UUID based on length and alphanumeric content
+    """
+    # Remove common separators
+    clean_text = re.sub(r'[-_\s{}()]', '', text)
+
+    # Check if it's alphanumeric and has UUID-like length
+    if re.match(r'^[0-9a-fA-F]+$', clean_text):
+        # Standard UUID without separators is 32 characters
+        # Allow some flexibility for variations
+        if len(clean_text) >= 28 and len(clean_text) <= 36:
+            return True
+
+    return False
+
+
 def remove_uuids_from_message(message: str) -> str:
+    """
+    Remove UUIDs and UUID-like strings from message
+    """
     UUID_REGEX = re.compile(
         r'\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b'
     )
@@ -68,12 +88,20 @@ def remove_uuids_from_message(message: str) -> str:
 
     cleaned_message = UUID_REGEX.sub('', message)
     cleaned_message = UUID_VARIANTS_REGEX.sub('', cleaned_message)
-    return cleaned_message
+
+    # Additional check for UUID-like alphanumeric strings
+    words = cleaned_message.split()
+    filtered_words = []
+    for word in words:
+        if not is_likely_uuid(word):
+            filtered_words.append(word)
+
+    return ' '.join(filtered_words)
 
 
 def is_phone_number_present(message: str) -> bool:
     """
-    Conservative phone number detection that only catches actual phone numbers
+    Enhanced phone number detection that catches various formats including special characters
     """
     # Remove UUIDs first
     cleaned_message = remove_uuids_from_message(message)
@@ -82,37 +110,45 @@ def is_phone_number_present(message: str) -> bool:
     temp_message = cleaned_message
 
     # Remove entire JSON-like structures
-    temp_message = re.sub(r"'[^']*':\s*\d+", "", temp_message)  # Remove 'property':1523
-    temp_message = re.sub(r"'[^']*':\s*'[^']*'", "", temp_message)  # Remove 'cost':'BDT 1200/per night'
-    temp_message = re.sub(r'"[^"]*":\s*\d+', "", temp_message)  # Remove "property":1523
-    temp_message = re.sub(r'"[^"]*":\s*"[^"]*"', "", temp_message)  # Remove "cost":"BDT 1200/per night"
+    temp_message = re.sub(r"'[^']*':\s*\d+", "", temp_message)
+    temp_message = re.sub(r"'[^']*':\s*'[^']*'", "", temp_message)
+    temp_message = re.sub(r'"[^"]*":\s*\d+', "", temp_message)
+    temp_message = re.sub(r'"[^"]*":\s*"[^"]*"', "", temp_message)
 
     # Remove common non-phone number patterns
-    temp_message = re.sub(r'BDT\s*\d+', '', temp_message)  # Remove BDT amounts
-    temp_message = re.sub(r'\d+/per\s+\w+', '', temp_message)  # Remove rates like "1200/per night"
-    temp_message = re.sub(r'\d+(?:st|nd|rd|th)\s+floor', '', temp_message)  # Remove floor numbers
-    temp_message = re.sub(r'https?://[^\s\'\"]+', '', temp_message)  # Remove URLs
-    temp_message = re.sub(r'[a-fA-F0-9]{8,}', '', temp_message)  # Remove long hex strings
+    temp_message = re.sub(r'BDT\s*\d+', '', temp_message)
+    temp_message = re.sub(r'\d+/per\s+\w+', '', temp_message)
+    temp_message = re.sub(r'\d+(?:st|nd|rd|th)\s+floor', '', temp_message)
+    temp_message = re.sub(r'https?://[^\s\'\"]+', '', temp_message)
 
-    # Only look for phone numbers with clear context or formatting
+    # Define common separators used in phone numbers (including special chars)
+    separators = r'[\s\-_\.,:;|/\\~`!@#$%^&*()+=\[\]{}\'"]'
+
+    # Enhanced phone number patterns - catches variations with special characters
     phone_patterns = [
-        # Phone numbers with clear context words
-        r'(?:phone|mobile|call|contact|number|dial|reach)[\s\-:]*(?:\+?88[\s\-]*)?0?1[3-9][\s\-]*\d{8}',
+        # Phone numbers with clear context words and any separators
+        rf'(?:phone|mobile|call|contact|number|dial|reach){separators}*(?:\+?88{separators}*)?0?1[0-9]{separators}*\d{{8,9}}',
 
-        # Phone numbers with specific formatting (parentheses, clear separators)
-        r'[\(\[](?:\+?88[\s\-]*)?0?1[3-9][\s\-]*\d{8}[\)\]]',
+        # Phone numbers with specific formatting (parentheses, brackets, etc.)
+        rf'[\(\[\{{](?:\+?88{separators}*)?0?1[0-9]{separators}*\d{{8,9}}[\)\]\}}]',
 
         # Phone numbers with country code clearly indicated
-        r'\+88[\s\-]*0?1[3-9][\s\-]*\d{8}',
+        rf'\+88{separators}*0?1[0-9]{separators}*\d{{8,9}}',
 
-        # Phone numbers with clear separators (dashes, spaces) - must be 11 digits
-        r'(?<!\d)01[3-9][\s\-]{1,2}\d{3}[\s\-]{1,2}\d{3}[\s\-]{1,2}\d{3}(?!\d)',
+        # Phone numbers with any separators - flexible pattern
+        rf'(?<!\d)01[0-9](?:{separators}+\d){{8,9}}(?!\d)',
 
-        # Phone numbers clearly separated by spaces or dashes
-        r'(?<!\d)(?:\+?88[\s\-]+)?01[3-9](?:[\s\-]+\d){8}(?!\d)',
+        # Stand-alone phone numbers with various separators
+        rf'(?<!\d)(?:\+?88{separators}*)?01[0-9](?:{separators}*\d){{8,9}}(?!\d)(?=\s|$|[^\d])',
 
-        # Stand-alone phone numbers at word boundaries with minimum formatting
-        r'(?<!\d)(?:\+?88)?01[3-9]\d{8}(?!\d)(?=\s|$|[^\d])',
+        # Catch patterns like "017-1-69-90881" or "017*1*69*90881" etc.
+        rf'(?<!\d)01[0-9]{separators}+\d{separators}+\d{{2}}{separators}+\d{{5}}(?!\d)',
+
+        # General pattern for numbers with any special character separators
+        rf'(?<!\d)01[0-9](?:{separators}*\d){{8,9}}(?!\d)',
+
+        # Pattern for phone numbers disguised with multiple special chars
+        rf'(?<!\d)0{separators}*1{separators}*[0-9](?:{separators}*\d){{8,9}}(?!\d)',
     ]
 
     # Check patterns on cleaned message
@@ -122,39 +158,49 @@ def is_phone_number_present(message: str) -> bool:
             # Extract only digits
             digits_only = re.sub(r'[^\d]', '', match)
 
-            # Validate Bangladesh mobile number format
-            if len(digits_only) == 11 and digits_only.startswith('01') and digits_only[2] in '3456789':
-                return True
-            elif len(digits_only) == 13 and digits_only.startswith('88') and digits_only[2:4] == '01' and digits_only[
-                4] in '3456789':
-                return True
+            # More flexible validation - any number starting with 01 and having 10-11 digits
+            if len(digits_only) >= 10 and len(digits_only) <= 13:
+                if digits_only.startswith('01'):
+                    return True
+                elif len(digits_only) >= 12 and digits_only.startswith('88') and digits_only[2:4] == '01':
+                    return True
 
-    # Check for standalone Bangladesh phone numbers in the original message
-    # This catches cases like "01716990881" sent as a standalone message
-    standalone_pattern = r'(?<!\d)01[3-9]\d{8}(?!\d)'
-    standalone_matches = re.findall(standalone_pattern, cleaned_message)
+    # Additional check: Look for sequences that could be phone numbers with special chars
+    # This catches creative obfuscation attempts
+    potential_phone_pattern = rf'(?<!\d)0{separators}*1{separators}*[0-9](?:{separators}*\d){{7,10}}(?!\d)'
+    potential_matches = re.findall(potential_phone_pattern, cleaned_message, re.IGNORECASE)
 
-    for match in standalone_matches:
-        # Make sure it's not part of a larger number or within structured data
-        # Check if it's surrounded by non-digit characters or at string boundaries
-        if re.search(r'(?<!\d)' + re.escape(match) + r'(?!\d)', cleaned_message):
-            # Additional check: make sure it's not within a JSON structure
-            # Look for the pattern in the original context
+    for match in potential_matches:
+        digits_only = re.sub(r'[^\d]', '', match)
+        if len(digits_only) >= 10 and len(digits_only) <= 11 and digits_only.startswith('01'):
+            # Check if it's not within structured data
             match_context = re.search(r'.{0,20}' + re.escape(match) + r'.{0,20}', cleaned_message)
             if match_context:
                 context = match_context.group()
-                # Skip if it's clearly within structured data (has quotes and colons nearby)
                 if not (re.search(r'[\'"][^\'":]*' + re.escape(match) + r'[^\'":]*[\'"]', context) or
                         re.search(r'[\'"][^\'":]*:\s*' + re.escape(match), context)):
                     return True
 
-    # Check for obvious phone sharing patterns only
+    # Check for obvious phone sharing patterns with special characters
     phone_sharing_patterns = [
-        r'(?:my|call|phone|mobile|number|contact)[\s\w]*(?:is|:)[\s]*(?:\+?88[\s\-]*)?0?1[3-9][\s\-]*\d{8}',
-        r'(?:\+?88[\s\-]*)?0?1[3-9][\s\-]*\d{8}[\s]*(?:is|call|phone|mobile|number|contact)',
+        rf'(?:my|call|phone|mobile|number|contact)[\s\w]*(?:is|:){separators}*(?:\+?88{separators}*)?0?1[0-9]{separators}*\d{{8,9}}',
+        rf'(?:\+?88{separators}*)?0?1[0-9]{separators}*\d{{8,9}}{separators}*(?:is|call|phone|mobile|number|contact)',
     ]
 
     for pattern in phone_sharing_patterns:
+        if re.search(pattern, temp_message, re.IGNORECASE):
+            return True
+
+    # Special check for heavily obfuscated numbers
+    # Look for patterns like "zero one seven", "0-1-7", "0*1*7" etc.
+    obfuscated_patterns = [
+        # Numbers spelled out
+        r'(?:zero|oh)\s*(?:one|1)\s*(?:seven|7|eight|8|nine|9|six|6|five|5|four|4|three|3|two|2)',
+        # With dots, stars, or other special chars between each digit
+        rf'0{separators}+1{separators}+[0-9](?:{separators}+\d){{7,9}}',
+    ]
+
+    for pattern in obfuscated_patterns:
         if re.search(pattern, temp_message, re.IGNORECASE):
             return True
 
@@ -187,7 +233,7 @@ def is_email_present(message: str) -> bool:
 
 def is_contact_info_present(message: str) -> bool:
     """
-    Conservative contact info detection
+    Enhanced contact info detection
     """
     message_without_uuids = remove_uuids_from_message(message).strip()
     if not message_without_uuids:
@@ -200,7 +246,6 @@ def is_contact_info_present(message: str) -> bool:
         return True
 
     return False
-
 
 def custom_encoder(obj):
     if hasattr(obj, 'model_dump'):
@@ -396,24 +441,52 @@ async def chatroom_ws_receiver(
     print(" =====>>><<<====")
     all_participants_ids = []
 
-    # Safely add the guest's ID
+    # Add from_user (guest) - handle both Link and direct User objects
     if chat_room.from_user:
-        all_participants_ids.append(chat_room.from_user.id)
-        print(all_participants_ids)
+        try:
+            if isinstance(chat_room.from_user, Link):
+                from_user = await chat_room.from_user.fetch()
+                if from_user and hasattr(from_user, 'id'):
+                    all_participants_ids.append(from_user.id)
+            elif hasattr(chat_room.from_user, 'id'):
+                all_participants_ids.append(chat_room.from_user.id)
+            print(f"Added from_user: {all_participants_ids}")
+        except Exception as e:
+            print(f"Error processing from_user: {e}")
 
-    # Safely handle the hosts/co-hosts
-    if isinstance(chat_room.to_user, list):
-        for user_link in chat_room.to_user:
-            user = await user_link.fetch() if isinstance(user_link, Link) else user_link
-            if user:
-                all_participants_ids.append(user.id)
-    elif isinstance(chat_room.to_user, User):
-        if chat_room.to_user:
-            all_participants_ids.append(chat_room.to_user.id)
+    # Add to_user (host/co-hosts) - handle both single Link, list of Links, and direct User objects
+    if chat_room.to_user:
+        try:
+            if isinstance(chat_room.to_user, list):
+                # It's a list of Links or Users
+                for user_ref in chat_room.to_user:
+                    if isinstance(user_ref, Link):
+                        user = await user_ref.fetch()
+                        if user and hasattr(user, 'id'):
+                            all_participants_ids.append(user.id)
+                    elif hasattr(user_ref, 'id'):
+                        all_participants_ids.append(user_ref.id)
+            else:
+                # It's a single Link or User
+                if isinstance(chat_room.to_user, Link):
+                    user = await chat_room.to_user.fetch()
+                    if user and hasattr(user, 'id'):
+                        all_participants_ids.append(user.id)
+                elif hasattr(chat_room.to_user, 'id'):
+                    all_participants_ids.append(chat_room.to_user.id)
+            print(f"Added to_user(s): {all_participants_ids}")
+        except Exception as e:
+            print(f"Error processing to_user: {e}")
 
+    # Remove duplicates and ensure we have all unique participant IDs
+    all_participants_ids = list(set(all_participants_ids))
+    print(f"All participants: {all_participants_ids}")
+    print(f"Current user: {current_user.id}")
+
+    # OTHER participants (excluding current user) for disconnect notifications
     other_participants_ids = [pid for pid in all_participants_ids if pid != current_user.id]
+    print(f"Other participants: {other_participants_ids}")
 
-    print(" ================= >>> ")
     try:
         while True:
             message = await websocket.receive_text()
@@ -432,6 +505,7 @@ async def chatroom_ws_receiver(
                         current_user=current_user
                     )
 
+                    # Send to room subscribers (both participants will get it in their chat room)
                     simple_payload = {
                         "action": "message",
                         "user": str(current_user.id),
@@ -439,19 +513,27 @@ async def chatroom_ws_receiver(
                         "id": str(saved_message.id),
                         "created_at": str(saved_message.created_at)
                     }
+
+                    if is_contact_info_present(simple_payload['message']):
+                        print(f"Message from user {current_user.id} contains contact info and is forbidden.")
+                        forbidden_response = {
+                            "action": "error",
+                            "type": "forbidden",
+                            "message": "Sending contact information is not allowed."
+                        }
+                        await websocket.send_text(json.dumps(forbidden_response, default=custom_encoder))
+                        continue
+
                     await broadcast.publish(
                         channel=str(chat_room.id),
                         message=json.dumps(simple_payload)
                     )
 
-                    # --- FIXED SERIALIZATION ---
-                    # 1. Manually serialize chat room to avoid model_dump issues with Link lists
                     try:
                         chat_room_data = {
                             "id": str(chat_room.id),
                             "name": chat_room.name,
-                            "status": chat_room.status.value if hasattr(chat_room.status, 'value') else str(
-                                chat_room.status),
+                            "status": chat_room.status.value if hasattr(chat_room.status, 'value') else str(chat_room.status),
                             "listing": chat_room.listing,
                             "booking_data": chat_room.booking_data,
                             "latest_message": chat_room.latest_message,
@@ -469,7 +551,6 @@ async def chatroom_ws_receiver(
                         # Handle to_user (can be single Link or list of Links)
                         if chat_room.to_user:
                             if isinstance(chat_room.to_user, list):
-                                # It's a list of Links
                                 to_user_ids = []
                                 for user_link in chat_room.to_user:
                                     if hasattr(user_link, 'id'):
@@ -478,7 +559,6 @@ async def chatroom_ws_receiver(
                                         to_user_ids.append(str(user_link))
                                 chat_room_data["to_user"] = to_user_ids
                             else:
-                                # It's a single Link
                                 if hasattr(chat_room.to_user, 'id'):
                                     chat_room_data["to_user"] = [str(chat_room.to_user.id)]
                                 else:
@@ -488,7 +568,6 @@ async def chatroom_ws_receiver(
 
                     except Exception as room_err:
                         print(f"Error serializing chat room: {room_err}")
-                        # Fallback to basic room info
                         chat_room_data = {
                             "id": str(chat_room.id),
                             "name": getattr(chat_room, 'name', ''),
@@ -502,32 +581,23 @@ async def chatroom_ws_receiver(
                             "to_user": []
                         }
 
-                    # 3. Create user data safely - manually build UserLiteBase compatible dict
+                    # 2. Create user data safely
                     try:
-                        # Manually extract fields that UserLiteBase expects
-                        user_data = {}
-
-                        # Required fields
-                        user_data["id"] = current_user.id  # Keep as PydanticObjectId, don't convert to string
-                        user_data["username"] = getattr(current_user, 'username', '')
-                        user_data["full_name"] = getattr(current_user, 'full_name', '')
-                        user_data["user_id"] = getattr(current_user, 'user_id', 0)
-
-                        # Optional fields
-                        user_data["email"] = getattr(current_user, 'email', None)
-                        user_data["image"] = getattr(current_user, 'image', None)
-                        user_data["phone_number"] = getattr(current_user, 'phone_number', None)
-                        user_data["last_online"] = getattr(current_user, 'last_online', None)
-                        user_data["online_status"] = getattr(current_user, 'online_status', False)
-
-                        # Create UserLiteBase instance and serialize it
+                        user_data = {
+                            "id": current_user.id,
+                            "username": getattr(current_user, 'username', ''),
+                            "full_name": getattr(current_user, 'full_name', ''),
+                            "user_id": getattr(current_user, 'user_id', 0),
+                            "email": getattr(current_user, 'email', None),
+                            "image": getattr(current_user, 'image', None),
+                            "phone_number": getattr(current_user, 'phone_number', None),
+                            "last_online": getattr(current_user, 'last_online', None),
+                            "online_status": getattr(current_user, 'online_status', False)
+                        }
                         user_lite = UserLiteBase(**user_data)
                         serialized_user = user_lite.model_dump()
-
                     except Exception as user_err:
                         print(f"Error serializing user data: {user_err}")
-                        print(f"Current user attributes: {dir(current_user)}")
-                        # Fallback to basic user info
                         serialized_user = {
                             "id": str(current_user.id),
                             "username": getattr(current_user, 'username', 'Unknown'),
@@ -540,37 +610,37 @@ async def chatroom_ws_receiver(
                             "online_status": getattr(current_user, 'online_status', False)
                         }
 
-                    # 4. Build the final payload using only basic Python types
+                    # 3. Build the global room payload
                     global_room_payload = {
                         "action": "message",
                         "id": str(saved_message.id),
                         "created_at": str(saved_message.created_at),
-                        "user": serialized_user,  # Use the safely serialized user
+                        "user": serialized_user,
                         "room": chat_room_data,
                         "message": body.get("message"),
                     }
 
-                    # 5. Convert to JSON string with custom encoder
+                    # 4. Convert to JSON string with custom encoder
                     message_to_broadcast = json.dumps(global_room_payload, default=custom_encoder)
 
-                    # 6. Broadcast to all participants
-                    all_subscribers_to_notify = [str(current_user.id)] + [str(pid) for pid in other_participants_ids]
-                    for user_id in all_subscribers_to_notify:
+                    # 5. FIXED: Broadcast to ALL participants' global rooms
+                    # This ensures both host and guest get the message in their global room
+                    print(f"Broadcasting to all participants: {all_participants_ids}")
+                    for participant_id in all_participants_ids:
+                        channel_name = f"user_global_room_{participant_id}"
+                        print(f"Broadcasting to channel: {channel_name}")
                         await broadcast.publish(
-                            channel=f"user_global_room_{user_id}",
+                            channel=channel_name,
                             message=message_to_broadcast,
                         )
-
-                # Handle other actions here...
-                # elif body.get("action") == "other_action":
-                #     pass
 
             except Exception as err:
                 print(f"ERROR processing valid JSON message: {err}")
                 import traceback
-                traceback.print_exc()  # This will help you debug further issues
+                traceback.print_exc()
 
     except WebSocketDisconnect:
+        # Notify other participants about disconnection
         for participant_id in other_participants_ids:
             await broadcast.publish(
                 channel=f"user_global_room_{participant_id}",

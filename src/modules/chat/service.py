@@ -83,15 +83,21 @@ class ChatService(BaseService):
 
         chat_room, has_access = await self.check_user_has_room_permission(room_id, current_user)
 
+        print(" ===== 1 ==")
         if not has_access:
             raise HTTPException(status_code=403, detail="You are not a member of this chat room")
 
         messages, count = await self.repository.get_room_messages(
             room_id=chat_room.id, query_param=query_param
         )
+
+        print(" === ", count)
+
         user_unread_message_count = await self.repository.count_user_unread_message(
             user_id=current_user.id, u_type=current_user.u_type
         )
+
+        print(" ===== message ", messages)
 
         # Properly resolve Links before creating ChatRoomResponse
         try:

@@ -43,20 +43,6 @@ class ChatRoomResponse(BaseModel):
 
     class Config:
         from_attributes = True
-    #
-    # @model_validator(mode='before')
-    # @classmethod
-    # def unify_to_user_field(cls, data: any) -> any:
-    #
-    #     if isinstance(data, dict):
-    #         to_user_field = data.get('to_user')
-    #         if to_user_field:
-    #             if not isinstance(to_user_field, list):
-    #                 data['to_user'] = [to_user_field]
-    #
-    #         if 'to_user' in data:
-    #             data['to_user'] = data.pop('to_user')
-    #     return data
 
 
 class ChatRoomMessageResponse(BaseModel):
@@ -70,23 +56,6 @@ class ChatRoomMessageResponse(BaseModel):
     file: Optional[str] = None
     m_type: MessageTypeEnum
     status: Optional[RoomStatusEnum] = None
-
-    # @model_validator(mode="after")
-    # def check_passwords_match(self):
-    #     # if self.m_type == MessageTypeEnum.NORMAL:
-    #     self.created_at = self.created_at + timedelta(hours=6)
-    #     return self
-
-    # @field_serializer("created_at")
-    # def serialize_created_at(self, created_at: datetime, _info):
-    #     return created_at + timedelta(hours=6)
-
-    # bd_tz = pytz.timezone("Asia/Dhaka")
-    # local_datetime = bd_tz.localize(created_at)
-    # local_date_string = local_datetime.strftime("%Y-%m-%d %I:%M %p")
-
-    # # Convert the local datetime to string format
-    # return local_date_string
 
 
 class ChatRoomMessageResponse2(BaseModel):

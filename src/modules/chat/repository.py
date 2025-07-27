@@ -176,37 +176,42 @@ class ChatRepository(BaseRepository):
     ) -> int:
         user_obj_id = PydanticObjectId(user_id)
 
-        # Reuse the backward-compatible filter from the service layer
+        # 1. Get all rooms for the user (this query is correct)
         if u_type == UserTypeOption.GUEST:
             filter_expression = (ChatRoom.from_user.id == user_obj_id,)
-        else:  # HOST
-            filter_expression = (
-                Or(
-                    ChatRoom.to_user.id == user_obj_id,
-                    In(ChatRoom.to_user.id, [user_obj_id])
-                ),
-            )
+        else:  # HOST or CO-HOST
+            filter_expression = (Or(ChatRoom.to_user.id == user_obj_id, In(ChatRoom.to_user.id, [user_obj_id])),)
 
-        user_all_chat_room = await ChatRoom.find(*filter_expression, fetch_links=True).to_list()
+        # We don't need fetch_links=True here, as we will fetch manually
+        user_all_chat_room = await ChatRoom.find(*filter_expression).to_list()
 
         total_unread_msg_count = 0
         for room in user_all_chat_room:
             other_user_ids = []
-            # --- BACKWARD-COMPATIBLE LOGIC ---
-            # Determine who the "other" users are based on the room structure
-            if room.from_user.id == user_obj_id:  # If current user is the guest
+
+            # 2. Explicitly fetch links before accessing attributes
+            from_user = await room.from_user.fetch() if isinstance(room.from_user, Link) else room.from_user
+
+            if from_user and from_user.id == user_obj_id:
+                # Current user is the GUEST. The "others" are the hosts.
                 if isinstance(room.to_user, list):
-                    other_user_ids.extend([host.id for host in room.to_user])
+                    for host_link in room.to_user:
+                        host = await host_link.fetch() if isinstance(host_link, Link) else host_link
+                        if host:
+                            other_user_ids.append(host.id)
                 elif isinstance(room.to_user, Link):
-                    other_user_ids.append(room.to_user.id)
-            else:  # If current user is a host
-                other_user_ids.append(room.from_user.id)
-            # --- END ---
+                    host = await room.to_user.fetch()
+                    if host:
+                        other_user_ids.append(host.id)
+            else:
+                # Current user is a HOST/CO-HOST. The "other" is the guest.
+                if from_user:
+                    other_user_ids.append(from_user.id)
 
             if not other_user_ids:
                 continue
 
-            # Count unread messages sent by any of the "other" users in this room
+            # 3. Count messages from the "other" users
             individual_chat_room_msg_count = await Message.find(
                 Message.chat_room.id == room.id,
                 In(Message.user.id, other_user_ids),
