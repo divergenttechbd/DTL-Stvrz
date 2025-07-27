@@ -33,7 +33,7 @@ urlpatterns = [
         name="listing_calendar",
     ),
 
-    path('manage-cohosts/', ManageListingCoHostsAPIView.as_view(), name='manage_listing_cohosts'),
+    path('manage-cohosts/', ManageListingCoHostsAPIView.as_view(), name='cohost_assign_replace'),
     path('my-cohost-assignments/', PrimaryHostCoHostAssignmentsListView.as_view(), name='my_primary_cohost_assignments'),
 
 path('primary-host/cohost-assignment-status/', PrimaryHostViewCoHostAssignmentsStatusAPIView.as_view(), name='primary_host_cohost_assignment_status'),

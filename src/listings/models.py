@@ -230,12 +230,12 @@ class CoHostAccessLevel(models.TextChoices):
 
 
 class ListingCoHost(BaseModel): # Inherits created_at, updated_at
-    listing = models.ForeignKey(
-        'listings.Listing', # Use string reference if Listing is in the same app or to avoid circular import
+    listing = models.OneToOneField(
+        'listings.Listing',
         on_delete=models.CASCADE,
-        related_name='cohost_assignments',
-        null=True,
-        blank=True,
+        related_name='cohost_assignment',  # Singular, as it's a one-to-one link
+        primary_key=True,  # Makes the listing's ID the primary key for this table.
+        help_text="The listing this co-host assignment is for."
     )
     co_host_user = models.ForeignKey( # The user who is the co-host
         settings.AUTH_USER_MODEL,
@@ -266,20 +266,24 @@ class ListingCoHost(BaseModel): # Inherits created_at, updated_at
     is_active = models.BooleanField(default=True, help_text="Is this co-hosting assignment currently active?")
 
     class Meta:
-        unique_together = ('listing', 'co_host_user') # A user can only be a co-host once for a specific listing
+        # unique_together = ('listing', 'co_host_user') # A user can only be a co-host once for a specific listing
         verbose_name = "Listing Co-Host Assignment"
         verbose_name_plural = "Listing Co-Host Assignments"
 
     def __str__(self):
-        return f"{self.co_host_user.username} co-hosting {self.listing.title} ({self.get_access_level_display()})"
+        if hasattr(self, 'listing'):
+            return f"{self.co_host_user.get_full_name()} co-hosting {self.listing.title}"
+        return f"Co-host assignment for {self.co_host_user.get_full_name()}"
 
     def clean(self):
         super().clean()
-        if self.listing.host == self.co_host_user:
-            raise ValidationError("A host cannot assign themselves as a co-host to their own listing.")
-        # Ensure primary_host matches listing.host if you keep this field
-        if hasattr(self, '_primary_host_is_listing_host_check') and self.primary_host != self.listing.host:
-             raise ValidationError("Primary host must be the owner of the listing.")
+        # Ensure a user is not assigned as a co-host to their own listing.
+        if self.listing and self.co_host_user and self.listing.host == self.co_host_user:
+            raise ValidationError("A user cannot be assigned as a co-host to their own listing.")
+
+        # Ensure the primary_host field is consistent with the listing's owner.
+        if self.listing and self.primary_host and self.listing.host != self.primary_host:
+            raise ValidationError("The primary_host must be the owner of the listing.")
 
     def save(self, *args, **kwargs):
         # Automatically set primary_host if not provided and if listing is set
@@ -287,7 +291,9 @@ class ListingCoHost(BaseModel): # Inherits created_at, updated_at
              self.primary_host = self.listing.host
         # Set a flag to perform the check only if primary_host was part of the instance or data.
         # This avoids error when self.listing.host is not yet available (e.g. during initial creation if listing is not set).
-        self._primary_host_is_listing_host_check = True
+        if self.listing:
+            self.primary_host = self.listing.host
+
+            # Run model-level validation before saving.
         self.full_clean()
-        delattr(self, '_primary_host_is_listing_host_check') # Clean up temporary attribute
         super().save(*args, **kwargs)

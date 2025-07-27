@@ -348,116 +348,90 @@ class HostListingCalendarApiView(views.APIView):
 
 # ------------------------------------ co host --------------------------------
 class ManageListingCoHostsAPIView(APIView):
-    permission_classes = [IsAuthenticated, IsHostUser]  # Only authenticated hosts can manage co-hosts
+    """
+    Manages the assignment of a co-host to a single listing.
+    - POST: Assigns a new co-host or replaces an existing one for a listing.
+    - PATCH: Updates the details (commission, access) of an existing assignment.
+    - DELETE: Removes a co-host assignment from a listing.
+    """
+    permission_classes = [IsAuthenticated, IsHostUser]
     swagger_tags = ["Co-host"]
 
     @swagger_auto_schema(
         request_body=AssignCoHostSerializer,
-        operation_summary="Assign a co-host to one or more listings",
+        operation_summary="Assign or Replace a Co-host for a Listing",
+        operation_description=(
+            "Assigns a specified user as a co-host to a single listing owned by the authenticated host. "
+            "If the listing already has a co-host, this action will **replace** the existing one with the new user."
+        ),
         responses={
+            201: "Co-host assigned successfully.",
+            200: "Co-host replaced successfully.",
             400: "Invalid input or validation error.",
-            403: "Permission denied (e.g., not the listing owner)."
+            403: "Permission denied (e.g., not the listing owner).",
         }
     )
     def post(self, request, *args, **kwargs):
         """
-        Assigns a specified user as a co-host to a list of listings
-        owned by the authenticated host.
+        Assigns or replaces a co-host for a single specified listing.
         """
         serializer = AssignCoHostSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             validated_data = serializer.validated_data
-            co_host_user_instance = validated_data['co_host_user_id']  # This is now the User instance
-            listings_to_assign = validated_data['listing_ids']  # This is a queryset of Listing instances
-            access_level = validated_data['access_level']
-            commission_percentage = validated_data['commission_percentage']
 
-            primary_host = request.user
-            created_assignments = []
-            errors = []
+            # The serializer provides the validated model instances directly.
+            co_host_user_instance = validated_data['co_host_user_id']
+            listing_instance = validated_data['listing_id']  # This is now a Listing object
 
             try:
-                with transaction.atomic():
-                    for listing_instance in listings_to_assign:
-                        # Double check ownership here, though serializer should have done it for listings_to_assign
-                        if listing_instance.host != primary_host:
-                            errors.append(f"You do not own listing: {listing_instance.title}")
-                            continue  # Skip this listing
+                assignment, created = ListingCoHost.objects.update_or_create(
+                    listing=listing_instance,
+                    defaults={
+                        'co_host_user': co_host_user_instance,
+                        'access_level': validated_data['access_level'],
+                        'commission_percentage': validated_data['commission_percentage'],
+                        'is_active': True
+                    }
+                )
 
-                        # The serializer already checks if co-host is already assigned.
-                        # And if co_host_user is the primary_host for this listing.
+                if created:
+                    message = "Co-host assigned successfully."
+                    status_code = status.HTTP_201_CREATED
+                else:
+                    message = "Co-host replaced successfully."
+                    status_code = status.HTTP_200_OK
 
-                        assignment, created = ListingCoHost.objects.update_or_create(
-                            listing=listing_instance,
-                            co_host_user=co_host_user_instance,
-                            defaults={
-                                'primary_host': primary_host,  # Explicitly set
-                                'access_level': access_level,
-                                'commission_percentage': commission_percentage,
-                                'is_active': True
-                            }
-                        )
-                        created_assignments.append(assignment)
-                        action_word = "Assigned" if created else "Updated existing assignment for"
-                        print(f"{action_word} {co_host_user_instance.username} as co-host for {listing_instance.title}")
+                response_data = ListingCoHostSerializer(instance=assignment).data
+                return Response({"message": message, "data": response_data}, status=status_code)
 
-                    if errors:  # If any errors occurred for specific listings
-                        # Depending on desired behavior, you might rollback the whole transaction
-                        # or commit successful assignments and report errors.
-                        # For now, let's assume we proceed with successful ones and report errors.
-                        # To rollback all on any error, raise an exception here inside the transaction block.
-                        # transaction.set_rollback(True) # If you want to rollback all
-                        return Response({
-                            "message": "Some assignments failed.",
-                            "errors": errors,
-                            "successful_assignments": ListingCoHostSerializer(created_assignments, many=True).data
-                        }, status=status.HTTP_400_BAD_REQUEST)
-
-            except IntegrityError as e:  # Catch potential unique_together violations if serializer missed something
+            except Exception as e:
                 return Response(
-                    {"message": "Error assigning co-host. Potential duplicate assignment.", "detail": str(e)},
-                    status=status.HTTP_400_BAD_REQUEST)
-            except Exception as e:  # Catch other unexpected errors
-                return Response({"message": "An unexpected error occurred.", "detail": str(e)},
-                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-            return Response(
-                {"message": "Co-host assignments processed.",
-                 "data": ListingCoHostSerializer(created_assignments, many=True).data},
-                status=status.HTTP_201_CREATED
-            )
+                    {"message": "An unexpected error occurred.", "detail": str(e)},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @swagger_auto_schema(
         request_body=UpdateCoHostAssignmentSerializer,
-        operation_summary="Update a Co-Host Assignment (e.g., commission, access)",
-        operation_description="Updates specific details of a co-host assignment, such as the commission percentage or access level. This requires the unique ID of the assignment.",
+        operation_summary="Update a Co-host Assignment",
+        operation_description=(
+            "Updates specific details of a co-host assignment, such as the commission percentage, "
+            "access level, or active status. This requires the ID of the assignment (which is the listing_id)."
+        ),
         responses={
             200: ListingCoHostSerializer,
-            400: "Invalid input or validation error.",
-            403: "Permission denied (e.g., not the listing owner).",
+            403: "Permission denied.",
             404: "Assignment not found."
         }
     )
     def patch(self, request, assignment_id, *args, **kwargs):
         """
-        Updates an existing co-host assignment. The primary host can change
-        the commission percentage, access level, or active status.
+        Updates an existing co-host assignment using its ID (listing_id).
         """
         primary_host = request.user
+        # Since listing_id is the primary key, we fetch the assignment with it.
+        assignment = get_object_or_404(ListingCoHost, pk=assignment_id, primary_host=primary_host)
 
-        # 1. Find the specific co-host assignment
-        assignment = get_object_or_404(ListingCoHost, pk=assignment_id)
-
-        # 2. Verify permission: The user making the request must be the primary host
-        if assignment.primary_host != primary_host:
-            return Response(
-                {"message": "You do not have permission to modify this co-host assignment."},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        # 3. Use the new serializer for validation and update
-        #    'partial=True' is key for PATCH, allowing partial updates.
         serializer = UpdateCoHostAssignmentSerializer(
             instance=assignment,
             data=request.data,
@@ -466,74 +440,39 @@ class ManageListingCoHostsAPIView(APIView):
 
         if serializer.is_valid():
             updated_assignment = serializer.save()
-            # Return the full, updated object using the main serializer
             response_serializer = ListingCoHostSerializer(updated_assignment)
             return Response(
                 {"message": "Co-host assignment updated successfully.", "data": response_serializer.data},
                 status=status.HTTP_200_OK
             )
-
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @swagger_auto_schema(
-        operation_summary="Remove a co-host from a specific listing",
-        manual_parameters=[
-            openapi.Parameter('listing_id', openapi.IN_QUERY, description="ID of the listing",
-                              type=openapi.TYPE_INTEGER, required=True),
-            openapi.Parameter('co_host_user_id', openapi.IN_QUERY, description="ID of the co-host user to remove",
-                              type=openapi.TYPE_INTEGER, required=True),
-        ],
+        operation_summary="Remove a Co-host from a Listing",
+        operation_description=(
+            "Removes a co-host assignment from a specific listing using the assignment's ID (which is the listing_id). "
+            "Only the primary host can perform this action."
+        ),
         responses={
             204: "Co-host removed successfully.",
-            400: "Missing parameters.",
             403: "Permission denied.",
             404: "Assignment not found."
         }
     )
-    def delete(self, request, *args, **kwargs):
+    def delete(self, request, assignment_id, *args, **kwargs):
         """
-        Removes a co-host assignment from a specific listing.
-        Requires listing_id and co_host_user_id as query parameters.
+        Removes a co-host assignment using its ID (listing_id).
         """
-        listing_id = request.query_params.get('listing_id')
-        co_host_user_id_to_remove = request.query_params.get('co_host_user_id')
-
-        if not listing_id or not co_host_user_id_to_remove:
-            return Response({"message": "listing_id and co_host_user_id query parameters are required."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            listing_id = int(listing_id)
-            co_host_user_id_to_remove = int(co_host_user_id_to_remove)
-        except ValueError:
-            return Response({"message": "Invalid ID format for listing or co-host user."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
         primary_host = request.user
-
-        # Find the specific co-host assignment
+        # The requesting user must be the primary host of the assignment.
         assignment = get_object_or_404(
             ListingCoHost,
-            listing_id=listing_id,
-            co_host_user_id=co_host_user_id_to_remove
+            pk=assignment_id,
+            primary_host=primary_host
         )
 
-        # Verify the requesting user is the primary host of the listing associated with this assignment
-        if assignment.listing.host != primary_host:
-            return Response({"message": "You do not have permission to remove co-hosts from this listing."},
-                            status=status.HTTP_403_FORBIDDEN)
-
-        try:
-            assignment.delete()
-            # Optionally, you can set is_active=False instead of hard deleting if you want to keep history
-            # assignment.is_active = False
-            # assignment.save()
-            print(f"Co-host {assignment.co_host_user.username} removed from listing {assignment.listing.title}")
-        except Exception as e:
-            return Response({"message": "Error removing co-host.", "detail": str(e)},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        return Response({"message": "Co-host removed successfully."}, status=status.HTTP_204_NO_CONTENT)
+        assignment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class PrimaryHostCoHostAssignmentsListView(generics.ListAPIView):

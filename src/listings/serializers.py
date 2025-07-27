@@ -255,60 +255,80 @@ class ListingStatusUpdateSerializer(Serializer):
 
 
 class AssignCoHostSerializer(serializers.Serializer):
-    co_host_user_id = serializers.IntegerField(required=True, help_text="ID of the user to be assigned as co-host.")
-    listing_ids = serializers.ListField(
-        child=serializers.IntegerField(),
-        allow_empty=False,
+    """
+    Validates the data for assigning or replacing a co-host for a single listing.
+    The `listing_id` field expects a list containing exactly one ID.
+    """
+    co_host_user_id = serializers.IntegerField(
         required=True,
-        help_text="List of IDs of the listings to assign this co-host to."
+        help_text="ID of the user to be assigned as co-host."
     )
-    access_level = serializers.ChoiceField(choices=CoHostAccessLevel.choices, required=True)
+    # This field now accepts a list but will be validated to contain only one item.
+    listing_id = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=True,
+        allow_empty=False,
+        help_text="A list containing the single ID of the listing to assign the co-host to. e.g., [101]"
+    )
+    access_level = serializers.ChoiceField(
+        choices=CoHostAccessLevel.choices,
+        required=True,
+        help_text="The level of access the co-host will have."
+    )
     commission_percentage = serializers.DecimalField(
         max_digits=5,
         decimal_places=2,
         min_value=Decimal('0.00'),
         max_value=Decimal('100.00'),
-        required=True
+        required=True,
+        help_text="Commission percentage for the co-host (0.00 to 100.00)."
     )
 
     def validate_co_host_user_id(self, value):
+        """Validates the co-host user and returns the User instance."""
         try:
             co_host_user = User.objects.get(pk=value, u_type=UserTypeOption.HOST, is_active=True)
         except User.DoesNotExist:
             raise serializers.ValidationError("Co-host user not found, is not a host, or is not active.")
 
-        # Prevent assigning oneself as co-host (though primary host check later is more direct)
         request_user = self.context['request'].user
         if request_user.id == co_host_user.id:
             raise serializers.ValidationError("You cannot assign yourself as a co-host.")
+        return co_host_user
 
-        return co_host_user  # Return the User instance for convenience
+    def validate_listing_id(self, value):
+        """
+        Validates that the list contains exactly one valid listing ID.
+        Returns the single Listing instance if valid.
+        """
+        # 1. Enforce that the list must contain exactly one item.
+        if len(value) != 1:
+            raise serializers.ValidationError("You must provide exactly one listing ID in the list.")
 
-    def validate_listing_ids(self, value):
+        single_listing_id = value[0]
         request_user = self.context['request'].user
-        # Check if all listings exist and belong to the requesting user
-        listings = Listing.objects.filter(pk__in=value, host=request_user, is_deleted=False)
 
-        if len(listings) != len(set(value)):  # Using set to handle potential duplicates in input list
-            # Find which IDs were problematic
-            valid_ids = [l.id for l in listings]
-            invalid_ids = [lid for lid in set(value) if lid not in valid_ids]
-            raise serializers.ValidationError(
-                f"One or more listings not found, do not belong to you, or are invalid: {invalid_ids}")
+        # 2. Perform the original validation on the single ID.
+        try:
+            listing = Listing.objects.get(pk=single_listing_id, host=request_user, is_deleted=False)
+        except Listing.DoesNotExist:
+            raise serializers.ValidationError(f"Listing with ID {single_listing_id} not found or you do not have permission to manage it.")
 
-        # Check if co-host is already assigned to any of these listings
-        for listing in listings:
-            if listing.host_id == self.initial_data.get(
-                'co_host_user_id'):  # Check against initial data before co_host_user_id is resolved to object
-                raise serializers.ValidationError(
-                    f"The selected co-host is the primary host of listing '{listing.title}'.")
-            if ListingCoHost.objects.filter(listing=listing,
-                                            co_host_user_id=self.initial_data.get('co_host_user_id')).exists():
-                raise serializers.ValidationError(
-                    f"This user is already a co-host for listing: '{listing.title}'. Please update existing assignment or remove first.")
+        # 3. Return the actual Listing object, not the list.
+        # This simplifies the logic in the view.
+        return listing
 
-        return listings
+    def validate(self, data):
+        """Performs cross-field validation."""
+        listing_instance = data.get('listing_id')
+        co_host_user_instance = data.get('co_host_user_id')
 
+        if listing_instance and co_host_user_instance:
+            if listing_instance.host == co_host_user_instance:
+                raise serializers.ValidationError({
+                    "co_host_user_id": "A user cannot be assigned as a co-host to their own listing."
+                })
+        return data
 
 class ListingCoHostSerializer(serializers.ModelSerializer):
     co_host_user_details = UserSerializer(source='co_host_user', read_only=True,
