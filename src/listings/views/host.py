@@ -620,7 +620,7 @@ class PrimaryHostViewCoHostAssignmentsStatusAPIView(APIView):
             is_deleted=False,
         ).prefetch_related(
             Prefetch(
-                'cohost_assignments',
+                'cohost_assignment',
                 queryset=ListingCoHost.objects.filter(co_host_user=co_host_user_instance, is_active=True),
                 to_attr='active_assignment_for_this_cohost'
             )
