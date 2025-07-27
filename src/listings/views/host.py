@@ -630,13 +630,21 @@ class PrimaryHostViewCoHostAssignmentsStatusAPIView(APIView):
         not_granted_listings_serialized_data = []
 
         for listing_instance in primary_host_listings_qs:
-            assignment_list = getattr(listing_instance, 'active_assignment_for_this_cohost', [])
+            try:
+                # Access the related object directly. No list, no index [0].
+                assignment = listing_instance.cohost_assignment
 
-            if assignment_list:
-                assignment = assignment_list[0]
-                setattr(listing_instance, 'cohost_assignment_details', assignment)
-                granted_assignments_serialized_data.append(PrimaryHostAssignmentViewSerializer(assignment).data)
-            else:
+                # Check if the assignment belongs to the co-host we are querying for
+                if assignment and assignment.co_host_user == co_host_user_instance and assignment.is_active:
+                    # This listing is granted to the specified co-host
+                    granted_assignments_serialized_data.append(PrimaryHostAssignmentViewSerializer(assignment).data)
+                else:
+                    # This listing is granted, but to a *different* co-host, so it's "not granted" for our target.
+                    not_granted_listings_serialized_data.append(
+                        BasicListingInfoWithPriceSerializer(listing_instance).data)
+
+            except ListingCoHost.DoesNotExist:
+                # This listing has no co-host assignment, so it's "not granted".
                 not_granted_listings_serialized_data.append(BasicListingInfoWithPriceSerializer(listing_instance).data)
 
         co_host_bio = None
