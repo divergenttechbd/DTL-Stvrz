@@ -381,28 +381,39 @@ class ManageListingCoHostsAPIView(APIView):
 
             # The serializer provides the validated model instances directly.
             co_host_user_instance = validated_data['co_host_user_id']
-            listing_instance = validated_data['listing_id']  # This is now a Listing object
+            listing_queryset = validated_data['listing_ids']  # This is now a Listing object
+
+            created_assignments = []
+            updated_assignments = []
 
             try:
-                assignment, created = ListingCoHost.objects.update_or_create(
-                    listing=listing_instance,
-                    defaults={
-                        'co_host_user': co_host_user_instance,
-                        'access_level': validated_data['access_level'],
-                        'commission_percentage': validated_data['commission_percentage'],
-                        'is_active': True
+                with transaction.atomic():
+                    # Loop through each valid listing instance
+                    for listing_instance in listing_queryset:
+                        assignment, created = ListingCoHost.objects.update_or_create(
+                            listing=listing_instance,  # Pass the single instance here
+                            defaults={
+                                'co_host_user': co_host_user_instance,
+                                'access_level': validated_data['access_level'],
+                                'commission_percentage': validated_data['commission_percentage'],
+                                'is_active': True
+                            }
+                        )
+                        if created:
+                            created_assignments.append(assignment)
+                        else:
+                            updated_assignments.append(assignment)
+
+                created_data = ListingCoHostSerializer(created_assignments, many=True).data
+                updated_data = ListingCoHostSerializer(updated_assignments, many=True).data
+
+                return Response({
+                    "message": "Co-host assignments processed successfully.",
+                    "data": {
+                        "newly_assigned": created_data,
+                        "updated_assignments": updated_data
                     }
-                )
-
-                if created:
-                    message = "Co-host assigned successfully."
-                    status_code = status.HTTP_201_CREATED
-                else:
-                    message = "Co-host replaced successfully."
-                    status_code = status.HTTP_200_OK
-
-                response_data = ListingCoHostSerializer(instance=assignment).data
-                return Response({"message": message, "data": response_data}, status=status_code)
+                }, status=status.HTTP_201_CREATED)
 
             except Exception as e:
                 return Response(
