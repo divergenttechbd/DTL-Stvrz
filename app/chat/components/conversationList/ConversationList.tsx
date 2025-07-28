@@ -17,8 +17,8 @@ interface ConversationListProps {
   isMobileView?: boolean
 }
 
-export const ConversationList:FC<ConversationListProps> = ({
-  className='',
+export const ConversationList: FC<ConversationListProps> = ({
+  className = '',
   isMobileView,
 }) => {
   const router = useRouter()
@@ -33,22 +33,28 @@ export const ConversationList:FC<ConversationListProps> = ({
     queryFn: () => getConversations(),
     refetchOnWindowFocus: false
   })
-  const { conversations } = useMergedConversations({fetchedConversations: data?.data})
+
+  // console.log("api call data-----------------", data)
+
+  const { conversations } = useMergedConversations({ fetchedConversations: data?.data })
+  // console.log("conversations data-----------------", conversations)
   const sortedConversations = useMemo(() => {
-    const data = conversations?.map(i => ({...i, updated_at: parseDate(messages?.[i.id]?.updatedAt || i.updated_at).toISOString()}))
+    const data = conversations?.map(i => ({ ...i, updated_at: parseDate(messages?.[i.id]?.updatedAt || i.updated_at).toISOString() }))
     return data?.sort((a, b) => b.updated_at.localeCompare(a.updated_at))
   }, [messages, conversations])
 
+  // console.log("conversations data-----------------", sortedConversations)
+
   // Make first one the selected conversation
   useEffect(() => {
-    if (!sortedConversations || activeConversationId) return
+    if(!sortedConversations || activeConversationId) return
     const firstConversation = sortedConversations[0]
-    if (!isMobileView && firstConversation) router.replace(`?conversation_id=${firstConversation.id}`)
+    if(!isMobileView && firstConversation) router.replace(`?conversation_id=${firstConversation.id}`)
   }, [sortedConversations, router, activeConversationId, isMobileView])
 
   // Save visited conversations
   useEffect(() => {
-    if (activeConversationId && !visitedConversations.includes(activeConversationId)) setVisitedConversations(prevValue => ([...prevValue, activeConversationId]))
+    if(activeConversationId && !visitedConversations.includes(activeConversationId)) setVisitedConversations(prevValue => ([...prevValue, activeConversationId]))
   }, [activeConversationId, visitedConversations])
 
   return (
@@ -56,7 +62,7 @@ export const ConversationList:FC<ConversationListProps> = ({
       {isFetching ? <Loader className='mt-20' /> : sortedConversations ? <>
         <Header title={messageType === 'bdbnb_support' ? 'Stayverz Support' : 'All messages'} allMessageCount={conversations?.length || 0} />
         {/* <SearchInbox /> */}
-        {sortedConversations ? <Conversations data={sortedConversations} activeConversationId={activeConversationId?? undefined} visitedConversations={visitedConversations} /> : null}
+        {sortedConversations ? <Conversations data={sortedConversations} activeConversationId={activeConversationId ?? undefined} visitedConversations={visitedConversations} /> : null}
       </> : 'Empty'}
     </div>
   )

@@ -32,6 +32,9 @@ const initialValue: {
 }
 
 const useChatSessionStore = create<ChatSessionStore>((set, get) => {
+
+  // console.log("--------------------------------", messages)
+
   return {
     conversations: undefined,
     messages: undefined,

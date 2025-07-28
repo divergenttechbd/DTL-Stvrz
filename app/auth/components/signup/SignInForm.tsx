@@ -9,7 +9,7 @@ import Button from '~/components/layout/Button'
 import { saveToken } from '~/lib/storage/token'
 import { login } from '~/queries/client/auth'
 import { useAuthStore } from '~/store/authStore'
-
+import Cookie from 'js-cookie'
 
 type SignInFormType = {
   onSuccess: Function
@@ -38,7 +38,7 @@ const SignInForm: FC<SignInFormType> = ({ onSuccess, handleSwitch, authFlow }) =
           userRole: formData?.userRole?.[0] || 'guest',
         }
         const res = await login(payload)
-        if (!res?.isSucceed) {
+        if(!res?.isSucceed) {
           throw res
         }
         saveToken({
@@ -55,11 +55,12 @@ const SignInForm: FC<SignInFormType> = ({ onSuccess, handleSwitch, authFlow }) =
           phoneNumber: userData?.phone_number,
           userRole: userData?.u_type,
         })
-        if ((window as any).flutterChannel) {
+        Cookie.set('host_guest_user_id', userData?.id ?? '', { expires: 90, path: '/' })
+        if((window as any).flutterChannel) {
           (window as any).flutterChannel.postMessage('successLogin')
         }
         return res
-      } catch (error: any) {
+      } catch(error: any) {
         setLoading(false)
         return error
       }

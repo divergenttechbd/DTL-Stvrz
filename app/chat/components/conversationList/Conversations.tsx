@@ -14,6 +14,9 @@ export const Conversations: FC<ConversationsProps> = ({
   activeConversationId,
   visitedConversations,
 }) => {
+
+  // console.log("next step data -------------------", data)
+
   return (
     <Virtuoso
       data={data}

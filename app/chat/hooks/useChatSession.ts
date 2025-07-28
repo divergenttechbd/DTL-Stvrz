@@ -17,23 +17,23 @@ export const useChatSession = (args?: UseChatSessionArgs) => {
   const token = getToken()
   useEffect(() => {
     const ws = new WebSocket(`${process.env.NEXT_PUBLIC_CHAT_SESSION_API_URL}/ws/chat/user/user-global-room/?token=${token}}`) //API User Global Room
-    
+
     const keepAliveInterval = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
+      if(ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'ping' }))
       }
     }, 30000)
-  
+
     ws.onclose = () => {
       clearInterval(keepAliveInterval)
     }
-  
+
     return () => {
       clearInterval(keepAliveInterval)
       ws.close()
     }
   }, [])
-  
+
   const handleConnectionOpen: WebSocket['onopen'] = useCallback(() => {
     setConnectionStatus('OPEN')
   }, [])
@@ -43,12 +43,12 @@ export const useChatSession = (args?: UseChatSessionArgs) => {
     setConnectionStatus(e.reason === 'EXIT' ? 'EXIT' : 'CLOSED')
   }, [])
 
-  const handleConnectionError: WebSocket['onerror']  = useCallback(() => {
+  const handleConnectionError: WebSocket['onerror'] = useCallback(() => {
     setConnectionStatus('ERROR')
   }, [])
 
   const listenConnectionChange = useCallback((session: WebSocket) => {
-    if (!session) return
+    if(!session) return
     session.addEventListener('open', handleConnectionOpen)
     session.addEventListener('close', handleConnectionClose)
     session.addEventListener('error', handleConnectionError)
@@ -57,19 +57,19 @@ export const useChatSession = (args?: UseChatSessionArgs) => {
   const handleSaveMessage = useCallback(({
     conversationId,
     ...message
-  }: Message & {conversationId: Conversation['id']}) => {
+  }: Message & { conversationId: Conversation['id'] }) => {
     addMessage(conversationId, message)
   }, [addMessage])
 
   const listenMessageReceive = useCallback((session: WebSocket) => {
-    if (!session) return
+    if(!session) return
     session.onmessage = (event) => {
       const data = JSON.parse(event.data)
-      if (data.action === 'join') updatePeerStatus(data.user_id, {online_status: true})
-      if (data.action === 'leave') updatePeerStatus(data.user_id, {online_status: false, last_online: data.last_online})
-      if (data.action === 'is_typing') updateTypingStatus(data.conversationId, data.status)
-      if (data.action === 'message') {
-        if (data.retryMessageId && (data.user.user_id === userId)) {
+      if(data.action === 'join') updatePeerStatus(data.user_id, { online_status: true })
+      if(data.action === 'leave') updatePeerStatus(data.user_id, { online_status: false, last_online: data.last_online })
+      if(data.action === 'is_typing') updateTypingStatus(data.conversationId, data.status)
+      if(data.action === 'message') {
+        if(data.retryMessageId && (data.user.user_id === userId)) {
           updateMessage(data.conversationId, data.retryMessageId, {
             id: data.id,
             created_at: data.created_at,
@@ -87,12 +87,12 @@ export const useChatSession = (args?: UseChatSessionArgs) => {
           })
         }
       }
-      if (data.action === 'read_done') updateLatestMessage(data.room_id, {is_read: true})
-      if (((data.action_type === 'inquiry') || (data.action_type === 'confirmed')) && Array.isArray(data.messages)) {
+      if(data.action === 'read_done') updateLatestMessage(data.room_id, { is_read: true })
+      if(((data.action_type === 'inquiry') || (data.action_type === 'confirmed')) && Array.isArray(data.messages)) {
         const chatRoom = data.messages[data.messages.length - 1].chat_room
         const conversation: Conversation = {
           id: chatRoom.id,
-          from_user:  {
+          from_user: {
             id: chatRoom.from_user.id,
             user_id: chatRoom.from_user.user_id,
             username: chatRoom.from_user.username,
@@ -123,6 +123,7 @@ export const useChatSession = (args?: UseChatSessionArgs) => {
             is_read: false,
             m_type: chatRoom.latest_message.m_type,
           },
+          name: chatRoom.name,
           status: chatRoom.updated_at,
           updated_at: chatRoom.updated_at,
           listing: chatRoom.updated_at,
@@ -147,10 +148,10 @@ export const useChatSession = (args?: UseChatSessionArgs) => {
             meta: item.meta
           })
         })
-        if (data.is_new_chatroom) addConversation(conversation)
+        if(data.is_new_chatroom) addConversation(conversation)
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handleSaveMessage, updateTypingStatus, updateLatestMessage, addConversation, updateMessage, userId])
 
   const reset = useCallback(() => {
@@ -170,7 +171,7 @@ export const useChatSession = (args?: UseChatSessionArgs) => {
   }, [reset, listenConnectionChange, listenMessageReceive])
 
   useEffect(() => {
-    if ((typeof canConnect === 'boolean') && !canConnect) return
+    if((typeof canConnect === 'boolean') && !canConnect) return
     connectSession()
     const session = sessionRef.current
     return () => session?.close(1000, 'EXIT')

@@ -14,6 +14,7 @@ export interface Conversation {
     id: string
     name: string
   }
+  name: string
   latest_message: Message
   updated_at: string
 }
@@ -26,7 +27,7 @@ export interface Message {
   m_type?: 'normal' | 'system'
   is_read?: boolean
   meta?: {
-    booking: {[key: string]: any}
+    booking: { [key: string]: any }
     listing: string
     user: string
   }
