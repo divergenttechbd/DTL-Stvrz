@@ -13,8 +13,8 @@ PLACE_TYPE_ICON_MAPPING = {
     "shared_room": f"{HOST}/icons/privacy_types/SharedRoom.svg",
 }
 PLACE_TYPE_ICON_MOBILE_MAPPING = {
-    "entire_place": f"https://d26o11dgjud8ta.cloudfront.net/icons/privacy_types/69dad81d1fa842498519d4e4106596e5-full.png",
-    "single_room": f"{HOST}/icons/privacy_types/Room.svg",
+    "entire_place": f"https://dapcxdqknn4nj.cloudfront.net/icons/aminity/98b61e3594ea494d9b5d2c9790fff256-entire-place.gif",
+    "single_room": f"https://dapcxdqknn4nj.cloudfront.net/icons/aminity/c0482009cc5a4e70b8cb64ddb6e118d6-Single-room.gif",
     "shared_room": f"https://d26o11dgjud8ta.cloudfront.net/icons/privacy_types/00defb1030684a36abf9677abe7c1a8e-shared.png",
 }
 
