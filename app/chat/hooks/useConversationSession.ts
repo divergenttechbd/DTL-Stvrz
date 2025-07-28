@@ -3,11 +3,11 @@ import { useChatSessionActions } from '~/app/chat/store/chatSessionStore'
 import { ConnectionStatus } from '~/app/chat/types'
 import { getToken } from '~/lib/storage/token'
 import { getUUID } from '~/lib/utils/uuid'
-import { Message, Peer } from '~/queries/models/conversation'
+import { Message } from '~/queries/models/conversation'
 
 export interface UseChatSessionArgs {
   conversationId: string
-  sender?: Peer
+  sender?: any
 }
 
 export const useConversationSession = ({
@@ -101,7 +101,7 @@ export const useConversationSession = ({
   const connectSession = useCallback(() => {
     if (!conversationId) return
     reset()
-    sessionRef.current = new WebSocket(`${process.env.NEXT_PUBLIC_CHAT_SESSION_API_URL}/ws/chat/user/${conversationId}/?token=${token}`)
+    sessionRef.current = new WebSocket(`${process.env.NEXT_PUBLIC_CHAT_SESSION_API_URL}/ws/chat/user/${conversationId}/?token=${token}`) //API Conversation
     listenConnectionChange(sessionRef.current)
   }, [conversationId, reset, listenConnectionChange])
 

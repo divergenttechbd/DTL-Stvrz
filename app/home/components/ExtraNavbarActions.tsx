@@ -11,7 +11,7 @@ export const ExtraNavbarActions = () => {
   const router = useRouter()
   const { isAuthenticated, logOut, userData } = useAuthStore()
   const { u_type: user_type } = userData || {}
-   const token = getToken()
+  const token = getToken()
   const handleSetActiveDropdown = useCallback((status?: AuthStore['authFlow']) => {
     useAuthStore.setState({ authFlow: status })
   }, [])
@@ -26,7 +26,7 @@ export const ExtraNavbarActions = () => {
   }, [userData])
 
   useEffect(() => {
-    let ws = new WebSocket(`${process.env.NEXT_PUBLIC_CHAT_SESSION_API_URL}/ws/chat/user/chat-stat/?token=${token}`)
+    let ws = new WebSocket(`${process.env.NEXT_PUBLIC_CHAT_SESSION_API_URL}/ws/chat/user/chat-stat/?token=${token}`) //API Guest Message Inbox Count
 
     ws.onmessage = (ev: MessageEvent<any>) => {
       const data = JSON.parse(ev.data)

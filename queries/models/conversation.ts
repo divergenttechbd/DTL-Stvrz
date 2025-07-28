@@ -2,8 +2,8 @@ export type ConverstationStatus = 'inquiry' | 'confirmed' | 'cancelled'
 
 export interface Conversation {
   id: string
-  from_user: Peer
-  to_user: Peer
+  from_user: any
+  to_user: any
   status: ConverstationStatus
   booking_data: {
     check_in: string

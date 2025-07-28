@@ -1,9 +1,9 @@
 import { useAuthStore } from '~/store/authStore'
-import { Peer } from '~/queries/models/conversation'
+// import { Peer } from '~/queries/models/conversation'
 
 export interface UseSenderReceiverArgs {
-  fromUser: Peer | undefined
-  toUser: Peer | undefined
+  fromUser: any | undefined
+  toUser: any | undefined
 }
 
 export const useSenderReceiver = ({

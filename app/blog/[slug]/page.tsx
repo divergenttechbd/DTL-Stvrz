@@ -11,7 +11,6 @@ const BlogDetails: FC = () => {
   const pathname = usePathname()
   const pathArr = pathname.split('/')
   const slug = pathArr[pathArr.length-1]
-  console.log(pathArr,slug)
 
   const { isLoading, data:blogDetails, error } = useQuery<any>({
     queryKey: ['blogDetails', slug],

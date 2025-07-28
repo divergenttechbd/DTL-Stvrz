@@ -16,7 +16,7 @@ export const useChatSession = (args?: UseChatSessionArgs) => {
   const sessionRef = useRef<WebSocket>()
   const token = getToken()
   useEffect(() => {
-    const ws = new WebSocket(`${process.env.NEXT_PUBLIC_CHAT_SESSION_API_URL}/ws/chat/user/user-global-room/?token=${token}}`)
+    const ws = new WebSocket(`${process.env.NEXT_PUBLIC_CHAT_SESSION_API_URL}/ws/chat/user/user-global-room/?token=${token}}`) //API User Global Room
     
     const keepAliveInterval = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
@@ -164,7 +164,7 @@ export const useChatSession = (args?: UseChatSessionArgs) => {
 
   const connectSession = useCallback(() => {
     reset()
-    sessionRef.current = new WebSocket(`${process.env.NEXT_PUBLIC_CHAT_SESSION_API_URL}/ws/chat/user/user-global-room/?token=${token}`)
+    sessionRef.current = new WebSocket(`${process.env.NEXT_PUBLIC_CHAT_SESSION_API_URL}/ws/chat/user/user-global-room/?token=${token}`) //API User Global Room
     listenConnectionChange(sessionRef.current)
     listenMessageReceive(sessionRef.current)
   }, [reset, listenConnectionChange, listenMessageReceive])

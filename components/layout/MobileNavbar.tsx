@@ -30,7 +30,7 @@ const MobileNavbar = () => {
   const [messageCount, setMessageCount] = useState(
     userData?.unread_message_count
   )
-   const token = getToken()
+  const token = getToken()
   console.log('unread message count -', userData?.unread_message_count)
   // set message count
   useEffect(() => {
@@ -40,7 +40,7 @@ const MobileNavbar = () => {
     }
   }, [userData])
   useEffect(() => {
-    let ws = new WebSocket(`${process.env.NEXT_PUBLIC_CHAT_SESSION_API_URL}/ws/chat/user/chat-stat/?token=${token}`)
+    let ws = new WebSocket(`${process.env.NEXT_PUBLIC_CHAT_SESSION_API_URL}/ws/chat/user/chat-stat/?token=${token}`) //API Host Message Inbox Count
     ws.onmessage = (ev: MessageEvent<any>) => {
       const data = JSON.parse(ev.data)
       setMessageCount(data?.count)
