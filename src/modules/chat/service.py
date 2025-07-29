@@ -55,22 +55,25 @@ class ChatService(BaseService):
         # Resolve from_user Link
         from_user = await chat_room.from_user.fetch() if isinstance(chat_room.from_user, Link) else chat_room.from_user
 
-        # Check if current user is the from_user
+
         is_participant = False
         if from_user and current_user.id == from_user.id:
             is_participant = True
         elif isinstance(chat_room.to_user, list):
-            # New group chat: check if user is in the list of hosts
+
             for user_link in chat_room.to_user:
                 user = await user_link.fetch() if isinstance(user_link, Link) else user_link
                 if user and current_user.id == user.id:
                     is_participant = True
                     break
         elif isinstance(chat_room.to_user, Link):
-            # Old 1-to-1 chat: check if user is the single host
+
             to_user = await chat_room.to_user.fetch()
             if to_user and current_user.id == to_user.id:
                 is_participant = True
+
+        if current_user.u_type == UserTypeOption.SYSTEM:
+            return chat_room, True
 
         if not is_participant:
             return None, False
