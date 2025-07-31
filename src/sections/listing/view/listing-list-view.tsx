@@ -13,6 +13,7 @@ import { useBoolean } from 'src/hooks/use-boolean';
 import CustomBreadcrumbs from 'src/components/custom-breadcrumbs';
 import EmptyContent from 'src/components/empty-content';
 import { useSettingsContext } from 'src/components/settings';
+import { ConfirmDialog } from 'src/components/custom-dialog';
 // types
 import { IListingFilters, IListingItem, ITourFilterValue } from 'src/types/listing';
 //
@@ -61,9 +62,11 @@ export default function TourListView({ fromUserDetails, userId }: ListingsListVi
   const settings = useSettingsContext();
 
   const openFilters = useBoolean();
+  const downloadConfirm = useBoolean();
+  const emptyData = useBoolean();
 
   const [listData, setListData] = useState<IListingItem[]>([]);
-  console.log('listData', listData);
+  // console.log('listData', listData);
   const [listMeta, setListMeta] = useState<any>();
   const [categoryOptions, setCategoryOptions] = useState<
     {
@@ -77,7 +80,6 @@ export default function TourListView({ fromUserDetails, userId }: ListingsListVi
   });
 
   const [filters, setFilters] = useState(defaultFilters);
-  // console.log('filters', filters);
 
   const getListingList = useCallback(async (data: any) => {
     try {
@@ -212,10 +214,30 @@ export default function TourListView({ fromUserDetails, userId }: ListingsListVi
   // Excel export function
   const handleExport = async () => {
     try {
-      const res = await getListings({ bookings: true, page: 1, page_size: 100000000 });
+      const res = await getListings({
+        category: filters.category,
+        verification_status: filters.verification_status,
+        status: filters.status,
+        created_at_before: filters.created_at_before
+          ? format(filters.created_at_before, 'yyyy-MM-dd')
+          : null,
+        created_at_after: filters.created_at_after
+          ? format(filters.created_at_after, 'yyyy-MM-dd')
+          : null,
+        page_size: 100000000,
+        page: 1,
+        sort_by: filters.sort_by,
+        host: userId || filters.host?.value,
+        latitude: filters.latitude,
+        longitude: filters.longitude,
+        radius: 25,
+      });
       if(!res.success) throw res.data;
-      const reportData = res.data;
-      const dataForExport = listData?.map((entry: any) => ({
+      if(!res.data.length) {
+        emptyData.onTrue()
+        return;
+      }
+      const dataForExport = res.data?.map((entry: any) => ({
         Title: entry?.title,
         Address: entry?.address,
         Price: entry?.price,
@@ -258,7 +280,7 @@ export default function TourListView({ fromUserDetails, userId }: ListingsListVi
               mb: { xs: 3, md: 5 },
             }}
           />
-          <Button variant="contained" onClick={handleExport}>
+          <Button variant="contained" onClick={downloadConfirm.onTrue}>
             <Iconify icon="solar:download-bold" sx={{ marginRight: 1 }} /> Download
           </Button>
         </Stack>
@@ -282,6 +304,34 @@ export default function TourListView({ fromUserDetails, userId }: ListingsListVi
         onPaginationChange={handlePaginationChange}
         totalPage={Math.ceil((listMeta?.total || 0) / filters.page_size)}
       />
+
+      <ConfirmDialog
+        open={downloadConfirm.value}
+        onClose={downloadConfirm.onFalse}
+        title="Download Report"
+        content={<>Are you sure want to download report?</>}
+        action={
+          <Button
+            variant="contained"
+            color="success"
+            onClick={() => {
+              handleExport();
+              downloadConfirm.onFalse();
+            }}
+          >
+            Download
+          </Button>
+        }
+      />
+
+      <ConfirmDialog
+        open={emptyData.value}
+        onClose={emptyData.onFalse}
+        title="No data found"
+        content={<>Couldn&apos;t find any matching records.</>}
+        action={null}
+      />
+
     </Container>
   );
 }

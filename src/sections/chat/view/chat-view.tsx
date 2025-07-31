@@ -46,13 +46,16 @@ export default function ChatView() {
     useGetConversation(`${selectedConversationId}`);
 
   const recipients = chatroom ? [chatroom.from_user, chatroom.to_user] : [];
+
+  // console.log("---------- recipients", chatroom)
+
   useEffect(() => {
-    if (conversationError || !selectedConversationId) {
+    if(conversationError || !selectedConversationId) {
       router.push(paths.dashboard.chat);
     }
   }, [conversationError, router, selectedConversationId]);
 
-  const handleAddRecipients = useCallback((selected: IChatRecepient[]) => {}, []);
+  const handleAddRecipients = useCallback((selected: IChatRecepient[]) => { }, []);
 
   const details = !!conversation && chatroom;
 
@@ -65,7 +68,7 @@ export default function ChatView() {
     >
       {details && (
         <ChatHeaderDetail
-        chatroom={chatroom}
+          chatroom={chatroom}
           participants={recipients}
           id={selectedConversationId}
           refetchConversation={refetchConversation}

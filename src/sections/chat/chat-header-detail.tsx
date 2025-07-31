@@ -16,7 +16,7 @@ import { updateRestriction } from 'src/utils/queries/chat';
 // ----------------------------------------------------------------------
 
 type Props = {
-  participants: IChatRecepient[];
+  participants: any;
   id: string;
   chatroom: IChatConversation;
   refetchConversation: Function;
@@ -28,9 +28,11 @@ export default function ChatHeaderDetail({
   chatroom,
   refetchConversation,
 }: Props) {
+
   const group = participants.length > 1;
 
   const singleParticipant = participants[0];
+  const singleMutipleParticipant = participants[1];
 
   const handleRefresh = useCallback(() => {
     refetchConversation();
@@ -42,9 +44,9 @@ export default function ChatHeaderDetail({
         id,
         status: chatroom?.status === 'closed' ? 'open' : 'closed',
       });
-      if (!res.success) throw res.data;
+      if(!res.success) throw res.data;
       refetchConversation();
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   }, [refetchConversation, id, chatroom]);
@@ -58,25 +60,63 @@ export default function ChatHeaderDetail({
             width: 32,
             height: 32,
           },
+
         }}
       >
-        {participants.map((participant) => (
-          <Link href={`${paths.dashboard.user.root}/${participant?.user_id}/edit`} target="_blank">
-            <Avatar key={participant.id} alt={participant.full_name} src={participant.image} />
-          </Link>
-        ))}
-      </AvatarGroup>
-      <Typography variant="subtitle2" marginLeft={1}>
-        {participants
-          .map(
-            (participant) =>
-              `${participant.full_name} ${
-                participant.username.endsWith('host') ? '(Host)' : '(Guest)'
-              }`
+
+        <Link color="inherit" sx={{ backgroundColor: 'transparent !important' }} href={`${paths.dashboard.user.root}/${singleParticipant?.user_id}/edit`} target="_blank">
+          <Avatar key={singleParticipant.id} alt={singleParticipant.full_name} src={singleParticipant.image} />
+        </Link>
+
+        {Array.isArray(singleMutipleParticipant) ? (
+          singleMutipleParticipant.length > 0 &&
+          singleMutipleParticipant.map((participant: any) => (
+            <Link
+              color="inherit"
+              sx={{ backgroundColor: 'transparent !important' }}
+              href={`${paths.dashboard.user.root}/${participant?.user_id}/edit`}
+              target="_blank"
+              key={participant.id}
+            >
+              <Avatar alt={participant.full_name} src={participant.image} />
+            </Link>
+          ))
+        ) : (
+          singleMutipleParticipant && (
+            <Link
+              color="inherit"
+              sx={{ backgroundColor: 'transparent !important' }}
+              href={`${paths.dashboard.user.root}/${singleMutipleParticipant?.user_id}/edit`}
+              target="_blank"
+              key={singleMutipleParticipant.id}
+            >
+              <Avatar alt={singleMutipleParticipant.full_name} src={singleMutipleParticipant.image} />
+            </Link>
           )
-          .join(', ')}
+        )}
+
+
+      </AvatarGroup>
+
+      <Typography variant="subtitle2" marginLeft={2}>
+        {singleParticipant.username} {singleParticipant.username.endsWith('host') ? '(Host) ' : '(Guest) '},
+        {singleMutipleParticipant.length ?
+          <>
+            {singleMutipleParticipant
+              .map(
+                (participant: any) =>
+                  `${participant.full_name} ${participant.username.endsWith('host') ? '(Host) ' : '(Guest) '
+                  }`
+              )
+              .join(', ')}
+          </> :
+          <>
+            {singleMutipleParticipant.username} {singleMutipleParticipant.username.endsWith('host') ? '(Host) ' : '(Guest) '}
+          </>
+
+        }
       </Typography>
-    </Stack>
+    </Stack >
   );
 
   const renderSingle = (

@@ -24,6 +24,7 @@ import CustomBreadcrumbs from 'src/components/custom-breadcrumbs';
 import Iconify from 'src/components/iconify';
 import Label from 'src/components/label';
 import Scrollbar from 'src/components/scrollbar';
+import { ConfirmDialog } from 'src/components/custom-dialog';
 import { useSettingsContext } from 'src/components/settings';
 import {
   TableHeadCustom,
@@ -84,6 +85,8 @@ export default function ReviewListView({
   });
   const settings = useSettingsContext();
   const confirm = useBoolean();
+  const downloadConfirm = useBoolean();
+  const emptyData = useBoolean();
 
   const [tableData, setTableData] = useState<any>([]);
   const [tableMeta, setTableMeta] = useState<any>({ total: 0 });
@@ -119,10 +122,10 @@ export default function ReviewListView({
   const getReviewList = useCallback(async (data: any) => {
     try {
       const res = await getReviews(data);
-      if (!res.success) throw res.data;
+      if(!res.success) throw res.data;
       setTableData(res.data);
       setTableMeta({ ...res.meta_data, user_status_count: res.stats });
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   }, []);
@@ -152,8 +155,33 @@ export default function ReviewListView({
   // Excel export function
   const handleExport = async () => {
     try {
-      const res = await getReviews({ stats: true, page: 1, page_size: 100000000, user: false });
-      if (!res.success) throw res.data;
+      // const res = await getReviews({ stats: true, page: 1, page_size: 100000000, user: false });
+      // if(!res.success) throw res.data;
+
+      const res = await getReviews({
+        stats: true,
+        created_at_after: filters.created_at_after
+          ? format(filters.created_at_after, 'yyyy-MM-dd')
+          : null,
+        created_at_before: filters.created_at_before
+          ? format(filters.created_at_before, 'yyyy-MM-dd')
+          : null,
+        identity_verification_status: filters.identity_verification_status?.replace(
+          'unverified',
+          'not_verified'
+        ),
+        page_size: 100000000,
+        page: 1,
+        status: filters.status === 'all' ? null : filters.status,
+        user: fromUserDetails && userId,
+      });
+
+      if(!res.success) throw res.data;
+      if(!res.data.length) {
+        emptyData.onTrue()
+        return;
+      }
+
       const reportData = res.data;
       const dataForExport = reportData?.map((entry: any) => ({
         'Review By': entry?.review_by?.full_name,
@@ -171,7 +199,7 @@ export default function ReviewListView({
       const today = new Date().toISOString().split('T')[0];
       XLSX.writeFile(workbook, `review_list_report_${today}.xlsx`);
       console.log(res.data);
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   };
@@ -192,7 +220,7 @@ export default function ReviewListView({
               mb: { xs: 3, md: 5 },
             }}
           />
-          <Button variant="contained" onClick={handleExport}>
+          <Button variant="contained" onClick={downloadConfirm.onTrue}>
             <Iconify icon="solar:download-bold" sx={{ marginRight: 1 }} /> Download
           </Button>
         </Stack>
@@ -229,7 +257,7 @@ export default function ReviewListView({
                   >
                     {tab.value === 'all'
                       ? (tableMeta?.user_status_count?.guest_review_count || 0) +
-                        (tableMeta?.user_status_count?.host_review_count || 0)
+                      (tableMeta?.user_status_count?.host_review_count || 0)
                       : tableMeta?.user_status_count?.[`${tab.value}_review_count`]}
                   </Label>
                 }
@@ -298,8 +326,8 @@ export default function ReviewListView({
                     row={row}
                     selected={table.selected.includes(row.id)}
                     onSelectRow={() => table.onSelectRow(row.id)}
-                    onDeleteRow={() => {}}
-                    onEditRow={() => {}}
+                    onDeleteRow={() => { }}
+                    onEditRow={() => { }}
                   />
                 ))}
 
@@ -319,6 +347,34 @@ export default function ReviewListView({
           onChangeDense={table.onChangeDense}
         />
       </Card>
+
+      <ConfirmDialog
+        open={downloadConfirm.value}
+        onClose={downloadConfirm.onFalse}
+        title="Download Report"
+        content={<>Are you sure want to download report?</>}
+        action={
+          <Button
+            variant="contained"
+            color="success"
+            onClick={() => {
+              handleExport();
+              downloadConfirm.onFalse();
+            }}
+          >
+            Download
+          </Button>
+        }
+      />
+
+      <ConfirmDialog
+        open={emptyData.value}
+        onClose={emptyData.onFalse}
+        title="No data found"
+        content={<>Couldn&apos;t find any matching records.</>}
+        action={null}
+      />
+
     </Container>
   );
 }

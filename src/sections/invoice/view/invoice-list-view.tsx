@@ -82,6 +82,9 @@ export default function BookingListView() {
   const confirm = useBoolean();
   const loading = useBoolean();
 
+  const downloadConfirm = useBoolean();
+  const emptyData = useBoolean();
+
   const [tableData, setTableData] = useState<any>([]);
   const [tableMeta, setTableMeta] = useState<any>({ total: 0 });
   const [filters, setFilters] = useState(defaultFilters);
@@ -111,7 +114,7 @@ export default function BookingListView() {
         host_payment_status:
           filters.status === 'total' || filters.status === 'overdue' ? null : filters.status,
       });
-      if (!res.success) throw res.data;
+      if(!res.success) throw res.data;
       setTableData(res.data);
 
       const result: Record<string, any> = {};
@@ -129,7 +132,7 @@ export default function BookingListView() {
             payOutItem.host_payment_status === statusCountItem.host_payment_status
         );
 
-        if (matchingTotalPayOutItem) {
+        if(matchingTotalPayOutItem) {
           const { host_payment_status, status_count } = statusCountItem;
           const { total_pay_out } = matchingTotalPayOutItem;
           const percentage = (total_pay_out / totalPayOut) * 100;
@@ -152,7 +155,7 @@ export default function BookingListView() {
         ...res.meta_data,
         stats: result,
       });
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   }, [filters, table.page, table.rowsPerPage]);
@@ -163,11 +166,11 @@ export default function BookingListView() {
       const res = await createPayment({
         booking_ids: table.selected.map((row: any) => row.id),
       });
-      if (!res.success) throw res.data;
+      if(!res.success) throw res.data;
       confirm.onFalse();
       table.setSelected([]);
       router.push(`/transactions/${res.data.host_payment_id}`);
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     } finally {
       loading.onFalse();
@@ -203,11 +206,32 @@ export default function BookingListView() {
   // Excel export function
   const handleExport = async () => {
     try {
-      const res = await getBookings({ transactions: true, page: 1, page_size: 100000000 });
-      if (!res.success) throw res.data;
-      const reportData = res.data;
-      console.log('reportData', reportData);
+      // const res = await getBookings({ transactions: true, page: 1, page_size: 100000000 });
+      // if(!res.success) throw res.data;
 
+      const res = await getBookings({
+        created_at_after: filters.created_at_after
+          ? format(filters.created_at_after, 'yyyy-MM-dd')
+          : null,
+        created_at_before: filters.created_at_before
+          ? format(filters.created_at_before, 'yyyy-MM-dd')
+          : null,
+        page_size: 100000000,
+        page: 1,
+        search: filters.search,
+        host: filters.host?.value,
+        transactions: true,
+        ...(filters.status === 'overdue' ? { over_due: true } : {}),
+        host_payment_status:
+          filters.status === 'total' || filters.status === 'overdue' ? null : filters.status,
+      });
+      if(!res.success) throw res.data;
+      if(!res.data.length) {
+        emptyData.onTrue()
+        return;
+      }
+
+      const reportData = res.data;
       const dataForExport = reportData?.map((entry: any) => ({
         Host: entry?.host?.full_name,
         'Host Number': entry?.host?.phone_number,
@@ -223,7 +247,7 @@ export default function BookingListView() {
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Invoice List Report');
       const today = new Date().toISOString().split('T')[0];
       XLSX.writeFile(workbook, `invoice_list_report_${today}.xlsx`);
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   };
@@ -247,7 +271,7 @@ export default function BookingListView() {
               mb: { xs: 3, md: 5 },
             }}
           />
-          <Button variant="contained" onClick={handleExport}>
+          <Button variant="contained" onClick={downloadConfirm.onTrue}>
             <Iconify icon="solar:download-bold" sx={{ marginRight: 1 }} /> Download
           </Button>
         </Stack>
@@ -268,7 +292,7 @@ export default function BookingListView() {
                 percent={tableMeta?.stats?.total?.percentage}
                 price={tableMeta?.stats?.total?.total_pay_out}
                 icon="solar:bill-list-bold-duotone"
-                // color={theme.palette.info.main}
+              // color={theme.palette.info.main}
               />
 
               <InvoiceAnalytic
@@ -277,7 +301,7 @@ export default function BookingListView() {
                 percent={tableMeta?.stats?.paid?.percentage}
                 price={tableMeta?.stats?.paid?.total_pay_out}
                 icon="solar:file-check-bold-duotone"
-                // color={theme.palette.success.main}
+              // color={theme.palette.success.main}
               />
 
               <InvoiceAnalytic
@@ -286,7 +310,7 @@ export default function BookingListView() {
                 percent={tableMeta?.stats?.unpaid?.percentage}
                 price={tableMeta?.stats?.unpaid?.total_pay_out}
                 icon="solar:sort-by-time-bold-duotone"
-                // color={theme.palette.warning.main}
+              // color={theme.palette.warning.main}
               />
 
               <InvoiceAnalytic
@@ -295,7 +319,7 @@ export default function BookingListView() {
                 percent={tableMeta?.stats?.overdue?.percentage}
                 price={tableMeta?.stats?.overdue?.total_pay_out}
                 icon="solar:bell-bing-bold-duotone"
-                // color={theme.palette.error.main}
+              // color={theme.palette.error.main}
               />
             </Stack>
           </Scrollbar>
@@ -438,6 +462,34 @@ export default function BookingListView() {
           </LoadingButton>
         }
       />
+
+      <ConfirmDialog
+        open={downloadConfirm.value}
+        onClose={downloadConfirm.onFalse}
+        title="Download Report"
+        content={<>Are you sure want to download report?</>}
+        action={
+          <Button
+            variant="contained"
+            color="success"
+            onClick={() => {
+              handleExport();
+              downloadConfirm.onFalse();
+            }}
+          >
+            Download
+          </Button>
+        }
+      />
+
+      <ConfirmDialog
+        open={emptyData.value}
+        onClose={emptyData.onFalse}
+        title="No data found"
+        content={<>Couldn&apos;t find any matching records.</>}
+        action={null}
+      />
+
     </>
   );
 }

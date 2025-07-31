@@ -38,6 +38,7 @@ type Props = {
 };
 
 export default function ChatNav({ loading, contacts, selectedConversationId }: Props) {
+
   const theme = useTheme();
 
   const router = useRouter();
@@ -63,13 +64,13 @@ export default function ChatNav({ loading, contacts, selectedConversationId }: P
   });
 
   useEffect(() => {
-    if (!mdUp) {
+    if(!mdUp) {
       onCloseDesktop();
     }
   }, [onCloseDesktop, mdUp]);
 
   const handleToggleNav = useCallback(() => {
-    if (mdUp) {
+    if(mdUp) {
       onCollapseDesktop();
     } else {
       onCloseMobile();
@@ -77,7 +78,7 @@ export default function ChatNav({ loading, contacts, selectedConversationId }: P
   }, [mdUp, onCloseMobile, onCollapseDesktop]);
 
   const handleClickCompose = useCallback(() => {
-    if (!mdUp) {
+    if(!mdUp) {
       onCloseMobile();
     }
     router.push(paths.dashboard.chat);
@@ -90,7 +91,7 @@ export default function ChatNav({ loading, contacts, selectedConversationId }: P
         query: inputValue,
       }));
 
-      if (inputValue) {
+      if(inputValue) {
         const results = contacts.filter((contact) =>
           contact.name.toLowerCase().includes(inputValue)
         );

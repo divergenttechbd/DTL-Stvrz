@@ -72,8 +72,6 @@ export default function BookingTableRow({
 
   const isDuringStay = today >= check_in && today <= check_out;
 
-  console.log("is during stay", isDuringStay)
-
   return (
     <TableRow hover selected={selected}>
       <TableCell padding="checkbox">

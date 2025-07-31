@@ -1,9 +1,8 @@
 // @mui
 import { useCallback, useEffect, useState } from 'react';
-import { useTheme } from '@mui/material/styles';
 import Container from '@mui/material/Container';
 import Grid from '@mui/material/Unstable_Grid2';
-
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { useMockedUser } from 'src/hooks/use-mocked-user';
 import { _appFeatured, _appAuthors, _appInstalled, _appRelated, _appInvoices } from 'src/_mock';
 import { useSettingsContext } from 'src/components/settings';
@@ -14,34 +13,29 @@ import {
   Box,
   Card,
   FormControl,
-  InputLabel,
   Link,
   MenuItem,
-  OutlinedInput,
   Radio,
   Select,
   TableBody,
   TableContainer,
   Typography,
 } from '@mui/material';
-import { TableHeadCustom, TableNoData } from 'src/components/table';
+
+import { TableHeadCustom } from 'src/components/table';
 import Scrollbar from 'src/components/scrollbar';
 import Table from '@mui/material/Table';
-import { getBookings, getLatestBookings } from 'src/utils/queries/bookings';
+import { getLatestBookings } from 'src/utils/queries/bookings';
 import { startCase } from 'lodash';
 import { RightIcon } from 'src/components/carousel/arrow-icons';
 
 import BookingTableRow from '../booking-table-row';
 import AnalyticsWidgetSummary from '../../analytics/analytics-widget-summary';
 import BookingStatistics from '../booking-statistics';
-import AppFeatured from '../app-featured';
 import HostTableRow from '../host-table-row';
 //
 
 const filterOptions = [
-  // { label: 'Weekly', value: 'WEEKLY' },
-  // { label: 'Monthly', value: 'MONTHLY' },
-  // { label: 'Yearly', value: 'YEARLY' },
   { label: 'WEEKLY', value: 'WEEKLY' },
   { label: 'MONTHLY', value: 'MONTHLY' },
   { label: 'YEARLY', value: 'YEARLY' },
@@ -78,11 +72,30 @@ const HOST_TABLE_HEAD = [
 ];
 
 export default function OverviewAppView() {
-  const { user } = useMockedUser();
   const [stats, setStats] = useState<DashboardStat>();
+
+  const getCurrentMonthDates = () => {
+    const now = new Date();
+
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    const toYMD = (date: Date) => date.toLocaleDateString('en-CA');
+
+    return {
+      start_date: toYMD(start),
+      end_date: toYMD(end),
+    };
+  };
+
+
+  const { start_date, end_date } = getCurrentMonthDates();
+
   const [filters, setFilters] = useState({
     bookingStatYear: 2024,
-    topSellingFilter: 'MONTHLY',
+    start_date,
+    end_date,
+    // topSellingFilter: 'MONTHLY',
     countStatFilter: 'MONTHLY',
     sortField: 'total_sell_amount',
     sortOrder: 'desc',
@@ -93,9 +106,9 @@ export default function OverviewAppView() {
   const fetchDashboardStat = useCallback(async () => {
     try {
       const dashboardStat = await getDashboardStat({ query_type: filters.countStatFilter });
-      if (!dashboardStat.success) throw dashboardStat.data;
+      if(!dashboardStat.success) throw dashboardStat.data;
       setStats((prevStats: any) => ({ ...prevStats, count_stat: dashboardStat?.data }));
-    } catch (err) {
+    } catch(err) {
       console.error(err);
     }
   }, [filters.countStatFilter]);
@@ -103,9 +116,9 @@ export default function OverviewAppView() {
   const fetchStatistics = useCallback(async () => {
     try {
       const stat = await getStatistics({ year: filters.bookingStatYear });
-      if (!stat.success) throw stat.data;
+      if(!stat.success) throw stat.data;
       setStats((prevStats: any) => ({ ...prevStats, booking_stat: stat?.data }));
-    } catch (err) {
+    } catch(err) {
       console.error(err);
     }
   }, [filters.bookingStatYear]);
@@ -113,9 +126,9 @@ export default function OverviewAppView() {
   const fetchBookings = useCallback(async () => {
     try {
       const bookingList = await getLatestBookings({ page_size: 5 });
-      if (!bookingList.success) throw bookingList.data;
+      if(!bookingList.success) throw bookingList.data;
       setStats((prevStats) => ({ ...prevStats, bookings: bookingList?.data }));
-    } catch (err) {
+    } catch(err) {
       console.error(err);
     }
   }, []);
@@ -124,16 +137,18 @@ export default function OverviewAppView() {
     try {
       const hostList = await getBestSellingHosts({
         page_size: 5,
-        query_type: filters.topSellingFilter,
+        start_date: filters.start_date,
+        end_date: filters.end_date,
+        // query_type: filters.topSellingFilter,
         sort_by: filters.sortField,
         order: filters.sortOrder
       });
-      if (!hostList.success) throw hostList.data;
+      if(!hostList.success) throw hostList.data;
       setStats((prevStats: any) => ({ ...prevStats, best_selling_hosts: hostList.data }));
-    } catch (err) {
+    } catch(err) {
       console.error(err);
     }
-  }, [filters.topSellingFilter, filters.sortField, filters.sortOrder]);
+  }, [filters.sortField, filters.sortOrder, filters.start_date, filters.end_date]);
 
   useEffect(() => {
     fetchDashboardStat();
@@ -155,7 +170,7 @@ export default function OverviewAppView() {
     <Container maxWidth={settings.themeStretch ? false : 'xl'}>
       <Grid container spacing={3}>
         <Grid xs={12}>
-          <Box sx={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between'}}>
+          <Box sx={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}>
             <Typography variant="h5" sx={{ ml: 2, mb: 2, mt: 2 }}>
               Best Selling Host
             </Typography>
@@ -165,6 +180,7 @@ export default function OverviewAppView() {
                 width: { xs: '200px' },
               }}
             >
+
               <Select
                 value={filters?.countStatFilter}
                 onChange={(val) =>
@@ -284,6 +300,48 @@ export default function OverviewAppView() {
                     width: { xs: '200px' },
                   }}
                 >
+                  <DatePicker
+                    label="Start date"
+                    value={filters.start_date ? new Date(filters.start_date) : null}
+                    onChange={(newValue) => {
+                      setFilters((prev) => ({
+                        ...prev,
+                        start_date: newValue ? newValue.toISOString().split('T')[0] : '',
+                      }));
+                    }}
+                  />
+                </FormControl>
+
+                <FormControl
+                  sx={{
+                    flexShrink: 1,
+                    width: { xs: '200px' },
+                  }}
+                >
+                  <DatePicker
+                    label="End date"
+                    value={filters.end_date ? new Date(filters.end_date) : null}
+                    onChange={(newValue) => {
+                      setFilters((prev) => ({
+                        ...prev,
+                        end_date: newValue ? newValue.toISOString().split('T')[0] : '',
+                      }));
+                    }}
+                    slotProps={{
+                      textField: {
+                        // error: dateError,
+                        // helperText: dateError && 'End date must be later than start date',
+                      },
+                    }}
+                  />
+                </FormControl>
+
+                {/* <FormControl
+                  sx={{
+                    flexShrink: 1,
+                    width: { xs: '200px' },
+                  }}
+                >
                   <Select
                     value={filters?.topSellingFilter}
                     onChange={(val) =>
@@ -310,7 +368,8 @@ export default function OverviewAppView() {
                       </MenuItem>
                     ))}
                   </Select>
-                </FormControl>
+                </FormControl> */}
+
                 <FormControl
                   sx={{
                     flexShrink: 1,

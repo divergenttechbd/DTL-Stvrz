@@ -133,7 +133,7 @@ export default function UserListView() {
             report_download: true,
           }
       );
-    } catch (e) {
+    } catch(e) {
       console.log(e);
     }
   }, [table, filters]);
@@ -141,10 +141,10 @@ export default function UserListView() {
   const getUserList = useCallback(async (data: any) => {
     try {
       const res = await getUsers(data);
-      if (!res.success) throw res.data;
+      if(!res.success) throw res.data;
       setTableData(res.data);
       setTableMeta({ ...res.meta_data, user_status_count: res.user_status_count });
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   }, []);
@@ -170,14 +170,14 @@ export default function UserListView() {
   }, [filters, getUserList, table.page, table.rowsPerPage]);
 
   const handleVerify = async (userId: string, status: string) => {
-    if (status === "verified") {
+    if(status === "verified") {
       try {
         console.log(userId, status);
         const res = await updateUser({
           id: userId,
           identity_status: "pending",
         });
-        if (!res.success) throw res.data;
+        if(!res.success) throw res.data;
         getUserList({
           ...filters,
           stats: true,
@@ -195,18 +195,18 @@ export default function UserListView() {
           page: table.page + 1,
           status: filters.status === 'all' ? null : filters.status,
         })
-      } catch (err) {
+      } catch(err) {
         console.log(err);
       }
     }
-    else if (status === "not_verified" || status === "pending") {
+    else if(status === "not_verified" || status === "pending") {
       try {
         console.log(userId, status);
         const res = await updateUser({
           id: userId,
           identity_status: "verified",
         });
-        if (!res.success) throw res.data;
+        if(!res.success) throw res.data;
         getUserList({
           ...filters,
           stats: true,
@@ -224,7 +224,7 @@ export default function UserListView() {
           page: table.page + 1,
           status: filters.status === 'all' ? null : filters.status,
         })
-      } catch (err) {
+      } catch(err) {
         console.log(err);
       }
     }
@@ -396,7 +396,7 @@ export default function UserListView() {
       <ConfirmDialog
         open={downloadConfirm.value}
         onClose={downloadConfirm.onFalse}
-        title="Delete"
+        title="Download Report"
         content={<>Are you sure want to download report?</>}
         action={
           <Button

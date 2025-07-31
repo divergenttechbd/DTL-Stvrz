@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import React, { useCallback } from 'react';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 // @mui
 import Stack from '@mui/material/Stack';
@@ -19,6 +19,7 @@ import { IChatConversation } from 'src/types/chat';
 //
 import { useGetNavItem } from './hooks';
 
+
 // ----------------------------------------------------------------------
 
 type Props = {
@@ -29,10 +30,9 @@ type Props = {
 };
 
 export default function ChatNavItem({ selected, collapse, conversation, onCloseMobile }: Props) {
+
   const { user } = useMockedUser();
-
   const mdUp = useResponsive('up', 'md');
-
   const router = useRouter();
 
   const { displayName, displayText, participants, lastActivity, hasOnlineInGroup } = useGetNavItem({
@@ -40,14 +40,17 @@ export default function ChatNavItem({ selected, collapse, conversation, onCloseM
     currentUserId: user.id,
   });
 
+  const singleParticipant = participants[0];
+  const singleMutipleParticipant = participants[1];
+
   const handleClickConversation = useCallback(async () => {
     try {
-      if (!mdUp) {
+      if(!mdUp) {
         onCloseMobile();
       }
 
       router.push(`${paths.dashboard.chat}?id=${conversation.id}`);
-    } catch (error) {
+    } catch(error) {
       console.error(error);
     }
   }, [conversation.id, mdUp, onCloseMobile, router]);
@@ -58,9 +61,12 @@ export default function ChatNavItem({ selected, collapse, conversation, onCloseM
       anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
     >
       <AvatarGroup variant="compact" sx={{ width: 48, height: 48 }}>
-        {participants.slice(0, 2).map((participant) => (
-          <Avatar key={participant.id} alt={participant.full_name} src={participant.image} />
-        ))}
+        {singleMutipleParticipant.length > 0 &&
+          singleMutipleParticipant.map((participant: any) => (
+            <Avatar key={participant?.id} alt={participant?.full_name} src={participant?.image} />
+          ))}
+        <Avatar alt={singleParticipant?.full_name} src={singleParticipant?.image} />
+        <Avatar alt={singleMutipleParticipant?.full_name} src={singleMutipleParticipant?.image} />
       </AvatarGroup>
     </Badge>
   );

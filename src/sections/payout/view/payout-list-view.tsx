@@ -79,6 +79,8 @@ export default function PayoutListView({ fromUserDetails = false, userId }: IPay
   });
   const settings = useSettingsContext();
   const confirm = useBoolean();
+  const downloadConfirm = useBoolean();
+  const emptyData = useBoolean();
 
   const [tableData, setTableData] = useState<any>([]);
   const [tableMeta, setTableMeta] = useState<any>({ total: 0 });
@@ -114,10 +116,10 @@ export default function PayoutListView({ fromUserDetails = false, userId }: IPay
   const getPaymentList = useCallback(async (data: any) => {
     try {
       const res = await getPayments(data);
-      if (!res.success) throw res.data;
+      if(!res.success) throw res.data;
       setTableData(res.data);
       setTableMeta({ ...res.meta_data, status_count: res.status_count });
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   }, []);
@@ -141,8 +143,27 @@ export default function PayoutListView({ fromUserDetails = false, userId }: IPay
   // Excel export function
   const handleExport = async () => {
     try {
-      const res = await getPayments({ page: 1, page_size: 100000000 });
-      if (!res.success) throw res.data;
+      // const res = await getPayments({ page: 1, page_size: 100000000 });
+      // if (!res.success) throw res.data;
+
+      const res = await getPayments({
+        payment_date_after: filters.payment_date_after
+          ? format(filters.payment_date_after, 'yyyy-MM-dd')
+          : null,
+        payment_date_before: filters.payment_date_before
+          ? format(filters.payment_date_before, 'yyyy-MM-dd')
+          : null,
+        host: fromUserDetails ? userId : filters.host?.value,
+        page_size: 100000000,
+        page: 1,
+        status: filters.status === 'all' ? null : filters.status,
+      });
+      if(!res.success) throw res.data;
+      if(!res.data.length) {
+        emptyData.onTrue()
+        return;
+      }
+
       const reportData = res.data;
       const dataForExport = reportData?.map((entry: any) => ({
         'Invoice Number': entry?.invoice_no,
@@ -159,7 +180,7 @@ export default function PayoutListView({ fromUserDetails = false, userId }: IPay
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Payout List Report');
       const today = new Date().toISOString().split('T')[0];
       XLSX.writeFile(workbook, `payout_list_report_${today}.xlsx`);
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   };
@@ -181,7 +202,7 @@ export default function PayoutListView({ fromUserDetails = false, userId }: IPay
                 mb: { xs: 3, md: 5 },
               }}
             />
-            <Button variant="contained" onClick={handleExport}>
+            <Button variant="contained" onClick={downloadConfirm.onTrue}>
               <Iconify icon="solar:download-bold" sx={{ marginRight: 1 }} /> Download
             </Button>
           </Stack>
@@ -215,11 +236,11 @@ export default function PayoutListView({ fromUserDetails = false, userId }: IPay
                   >
                     {tab.value === 'all'
                       ? tableMeta.status_count?.reduce(
-                          (acc: number, cur: any) => acc + cur.status_count,
-                          0
-                        )
+                        (acc: number, cur: any) => acc + cur.status_count,
+                        0
+                      )
                       : tableMeta?.status_count?.find((count: any) => count.status === tab.value)
-                          ?.status_count || 0}
+                        ?.status_count || 0}
                   </Label>
                 }
               />
@@ -286,8 +307,8 @@ export default function PayoutListView({ fromUserDetails = false, userId }: IPay
                       row={row}
                       selected={table.selected.includes(row.id)}
                       onSelectRow={() => table.onSelectRow(row.id)}
-                      onDeleteRow={() => {}}
-                      onEditRow={() => {}}
+                      onDeleteRow={() => { }}
+                      onEditRow={() => { }}
                     />
                   ))}
 
@@ -330,6 +351,35 @@ export default function PayoutListView({ fromUserDetails = false, userId }: IPay
           </Button>
         }
       />
+
+
+      <ConfirmDialog
+        open={downloadConfirm.value}
+        onClose={downloadConfirm.onFalse}
+        title="Download Report"
+        content={<>Are you sure want to download report?</>}
+        action={
+          <Button
+            variant="contained"
+            color="success"
+            onClick={() => {
+              handleExport();
+              downloadConfirm.onFalse();
+            }}
+          >
+            Download
+          </Button>
+        }
+      />
+
+      <ConfirmDialog
+        open={emptyData.value}
+        onClose={emptyData.onFalse}
+        title="No data found"
+        content={<>Couldn&apos;t find any matching records.</>}
+        action={null}
+      />
+
     </>
   );
 }

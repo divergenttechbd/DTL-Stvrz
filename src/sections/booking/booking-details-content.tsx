@@ -46,8 +46,6 @@ export default function BookingDetailsContent({ booking }: Props) {
     discount_amount_applied,
   } = booking;
 
-  console.log('booking', booking);
-
   const showPriceBreakdown = useBoolean();
   const showPriceBreakdownForHost = useBoolean();
 

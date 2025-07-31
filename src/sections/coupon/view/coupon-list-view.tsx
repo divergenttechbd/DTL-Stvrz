@@ -81,8 +81,8 @@ export default function CouponListView() {
     defaultRowsPerPage: 10,
   });
   const settings = useSettingsContext();
-  const confirm = useBoolean();
   const downloadConfirm = useBoolean();
+  const emptyData = useBoolean();
 
   const [tableData, setTableData] = useState<any>([]);
   const [tableMeta, setTableMeta] = useState<any>({ total: 0 });
@@ -113,24 +113,24 @@ export default function CouponListView() {
       await downloadUserCSV(
         table.selected.length
           ? {
-              ids: table.selected,
-            }
+            ids: table.selected,
+          }
           : {
-              date_joined_after: filters.date_joined_after
-                ? format(filters.date_joined_after, 'yyyy-MM-dd')
-                : null,
-              date_joined_before: filters.date_joined_before
-                ? format(filters.date_joined_before, 'yyyy-MM-dd')
-                : null,
-              u_type: filters.u_type,
-              identity_verification_status: filters.identity_verification_status,
-              search: filters.search,
-              status: filters.status === 'all' ? null : filters.status,
-              page_size: 0,
-              report_download: true,
-            }
+            date_joined_after: filters.date_joined_after
+              ? format(filters.date_joined_after, 'yyyy-MM-dd')
+              : null,
+            date_joined_before: filters.date_joined_before
+              ? format(filters.date_joined_before, 'yyyy-MM-dd')
+              : null,
+            u_type: filters.u_type,
+            identity_verification_status: filters.identity_verification_status,
+            search: filters.search,
+            status: filters.status === 'all' ? null : filters.status,
+            page_size: 0,
+            report_download: true,
+          }
       );
-    } catch (e) {
+    } catch(e) {
       console.log(e);
     }
   }, [table, filters]);
@@ -138,11 +138,11 @@ export default function CouponListView() {
   const getCouponList = useCallback(async (data: any) => {
     try {
       const res = await getCoupons(data);
-      if (!res.success) throw res.data;
+      if(!res.success) throw res.data;
       console.log('coupon data--------------', res.data);
       setTableData(res.data);
       // setTableMeta({ ...res.meta_data, user_status_count: res.user_status_count });
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   }, []);
@@ -157,7 +157,11 @@ export default function CouponListView() {
   const handleExport = async () => {
     try {
       const res = await getCoupons({ page: 1, page_size: 100000000 });
-      if (!res.success) throw res.data;
+      if(!res.success) throw res.data;
+      if(!res.data.length) {
+        emptyData.onTrue()
+        return;
+      }
       const reportData = res.data;
       const dataForExport = reportData?.map((entry: any) => ({
         Code: entry?.code,
@@ -175,7 +179,7 @@ export default function CouponListView() {
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Coupon List Report');
       const today = new Date().toISOString().split('T')[0];
       XLSX.writeFile(workbook, `coupon_list_report_${today}.xlsx`);
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   };
@@ -231,7 +235,7 @@ export default function CouponListView() {
                       row={row}
                       selected={table.selected.includes(row.id)}
                       onSelectRow={() => table.onSelectRow(row.id)}
-                      onDeleteRow={() => {}}
+                      onDeleteRow={() => { }}
                     />
                   ))}
 
@@ -271,6 +275,15 @@ export default function CouponListView() {
           </Button>
         }
       />
+
+      <ConfirmDialog
+        open={emptyData.value}
+        onClose={emptyData.onFalse}
+        title="No data found"
+        content={<>Couldn&apos;t find any matching records.</>}
+        action={null}
+      />
+
     </>
   );
 }

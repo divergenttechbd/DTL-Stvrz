@@ -73,8 +73,8 @@ export default function ReferralListView() {
     defaultRowsPerPage: 10,
   });
   const settings = useSettingsContext();
-  const confirm = useBoolean();
   const downloadConfirm = useBoolean();
+  const emptyData = useBoolean();
 
   const [tableData, setTableData] = useState<any>([]);
   const [tableMeta, setTableMeta] = useState<any>({ total: 0 });
@@ -103,10 +103,10 @@ export default function ReferralListView() {
   const getReferralList = useCallback(async (data: any) => {
     try {
       const res = await getReferrals(data);
-      if (!res.success) throw res.data;
+      if(!res.success) throw res.data;
       setTableData(res.data);
       // setTableMeta({ ...res.meta_data, user_status_count: res.user_status_count });
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   }, []);
@@ -125,8 +125,21 @@ export default function ReferralListView() {
 
   const handleExport = async () => {
     try {
-      const res = await getReferrals({ page: 1, page_size: 100000000 });
-      if (!res.success) throw res.data;
+      // const res = await getReferrals({ page: 1, page_size: 100000000 });
+      const res = await getReferrals({
+        username: filters.username ? filters.username : null,
+        email: filters.email ? filters.email : null,
+        referral_type: filters.referral_type ? filters.referral_type : null,
+        u_type: filters.u_type ? filters.u_type : null,
+        page_size: 100000000,
+        page: 1,
+      });
+      if(!res.success) throw res.data;
+      if(!res.data.length) {
+        emptyData.onTrue()
+        return;
+      }
+      if(!res.success) throw res.data;
       const reportData = res.data;
       const dataForExport = reportData?.map((entry: any) => ({
         'Full Name': entry?.full_name,
@@ -145,7 +158,7 @@ export default function ReferralListView() {
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Referral List Report');
       const today = new Date().toISOString().split('T')[0];
       XLSX.writeFile(workbook, `referral_list_report_${today}.xlsx`);
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   };
@@ -231,8 +244,8 @@ export default function ReferralListView() {
                       row={row}
                       selected={table.selected.includes(row.id)}
                       onSelectRow={() => table.onSelectRow(row.id)}
-                      onDeleteRow={() => {}}
-                      onEditRow={() => {}}
+                      onDeleteRow={() => { }}
+                      onEditRow={() => { }}
                     />
                   ))}
 
@@ -273,6 +286,15 @@ export default function ReferralListView() {
           </Button>
         }
       />
+
+      <ConfirmDialog
+        open={emptyData.value}
+        onClose={emptyData.onFalse}
+        title="No data found"
+        content={<>Couldn&apos;t find any matching records.</>}
+        action={null}
+      />
+
     </>
   );
 }

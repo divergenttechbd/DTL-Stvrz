@@ -87,7 +87,6 @@ export default function BookingListView({
   userType,
   userId,
 }: BookingListViewProps) {
-  // console.log('bookings ---', fromUserDetails, userType, userId);
 
   const table = useTable({
     defaultCurrentPage: 0,
@@ -95,6 +94,8 @@ export default function BookingListView({
   });
   const settings = useSettingsContext();
   const confirm = useBoolean();
+  const downloadConfirm = useBoolean();
+  const emptyData = useBoolean();
 
   const [tableData, setTableData] = useState<any>([]);
 
@@ -174,7 +175,6 @@ export default function BookingListView({
         cancellation_reason: 'Canceled by Admin',
       });
       if(!res.success) throw res.data;
-      // console.log(id);
       getBookingList({
         bookings: true,
         page: table.page + 1,
@@ -189,10 +189,28 @@ export default function BookingListView({
   // Excel export function
   const handleExport = async () => {
     try {
-      const res = await getBookings({ bookings: true, page: 1, page_size: 100000000 });
+      const res = await getBookings({
+        created_at_after: filters.created_at_after
+          ? format(filters.created_at_after, 'yyyy-MM-dd')
+          : null,
+        bookings: true,
+        host: fromUserDetails && userType === 'host' ? userId : filters.host?.value,
+        guest: fromUserDetails && userType === 'guest' ? userId : null,
+        created_at_before: filters.created_at_before
+          ? format(filters.created_at_before, 'yyyy-MM-dd')
+          : null,
+        page_size: 100000000,
+        page: 1,
+        search: filters.search,
+        event_type: filters.status === 'all' ? null : filters.status,
+      });
       if(!res.success) throw res.data;
-      const reportData = res.data;
-      const dataForExport = reportData?.map((entry: any) => ({
+      if(!res.data.length) {
+        emptyData.onTrue()
+        return;
+      }
+      const responseData = res?.data
+      const dataForExport = responseData?.map((entry: any) => ({
         'Guest Name': entry?.guest?.full_name,
         'Guest Phone Number': entry?.guest?.phone_number,
         'Host Name': entry?.host?.full_name,
@@ -233,7 +251,7 @@ export default function BookingListView({
                 mb: { xs: 3, md: 5 },
               }}
             />
-            <Button variant="contained" onClick={handleExport}>
+            <Button variant="contained" onClick={downloadConfirm.onTrue}>
               <Iconify icon="solar:download-bold" sx={{ marginRight: 1 }} /> Download
             </Button>
           </Stack>
@@ -384,6 +402,34 @@ export default function BookingListView({
           </Button>
         }
       />
+
+      <ConfirmDialog
+        open={downloadConfirm.value}
+        onClose={downloadConfirm.onFalse}
+        title="Download Report"
+        content={<>Are you sure want to download report?</>}
+        action={
+          <Button
+            variant="contained"
+            color="success"
+            onClick={() => {
+              handleExport();
+              downloadConfirm.onFalse();
+            }}
+          >
+            Download
+          </Button>
+        }
+      />
+
+      <ConfirmDialog
+        open={emptyData.value}
+        onClose={emptyData.onFalse}
+        title="No data found"
+        content={<>Couldn&apos;t find any matching records.</>}
+        action={null}
+      />
+
     </>
   );
 }
