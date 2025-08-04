@@ -139,3 +139,4 @@ GitHub.sublime-settings
 deployment
 prod-guesthouse
 test.py
+/src/*/migrations/
