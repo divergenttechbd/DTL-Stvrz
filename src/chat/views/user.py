@@ -64,6 +64,8 @@ class UserChatApiView(views.APIView):
         if not all_recipients:
             return Response({"message": "No valid host or co-hosts found for this listing."}, status=status.HTTP_400_BAD_REQUEST)
 
+
+        # Get all host usernames and sort them to create a deterministic, canonical name
         # Get all host usernames and sort them to create a deterministic, canonical name
         host_usernames = [user.username for user in all_recipients]
         sorted_host_usernames = sorted(host_usernames)
