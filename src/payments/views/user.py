@@ -97,6 +97,9 @@ class UserSSLCommerzOrderPaymentView(CreateAPIView):
             )
         res_data = {
             "payment_gateway_url": response["GatewayPageURL"],
+            "success_url": f"{settings.BACKEND_BASE_URL}/payments/user/booking/success/{booking.invoice_no}/",
+            "fail_url": f"{settings.BACKEND_BASE_URL}/payments/user/booking/fail/{booking.invoice_no}/",
+            "cancel_url": f"{settings.BACKEND_BASE_URL}/payments/user/booking/cancel/{booking.invoice_no}/",
             "logo": response["storeLogo"],
             # "store_name": response["store_name"],
         }

@@ -55,6 +55,48 @@ class HostReservationRetrieveAPIView(views.APIView):
     permission_classes = (IsAuthenticated, IsHostUser, HostUserHasObjectAccess)
     swagger_tags = ["Host Bookings"]
 
+    def _get_extra_booking_data(self, booking):
+        """
+        Calculate the missing fields that aren't stored in the model.
+        This mimics the calculation logic from GuestBookingProcess.
+        """
+        extra_data = {}
+
+        # Get the original prices from price_info
+        original_total = 0.0
+        los_discount_total = 0.0
+
+        if hasattr(booking, 'price_info') and booking.price_info:
+            for date_str, price_data in booking.price_info.items():
+                original_calendar_price = price_data.get('original_calendar_price', price_data.get('price', 0))
+                current_price = price_data.get('price', 0)
+
+                original_total += float(original_calendar_price)
+                los_discount_total += float(original_calendar_price) - float(current_price)
+
+        # Calculate fields
+        extra_data['original_price_before_discount'] = original_total
+        extra_data['accommodation_charge'] = float(booking.price) if booking.price else 0.0
+
+        # Calculate total discount (LoS + coupon)
+        coupon_discount = float(booking.discount_amount_applied) if booking.discount_amount_applied else 0.0
+        extra_data['total_discount_amount'] = los_discount_total + coupon_discount
+
+        # Calculate subtotal before coupon (accommodation + service charges)
+        guest_service_charge = float(booking.guest_service_charge) if booking.guest_service_charge else 0.0
+        extra_data['subtotal_before_generic_coupon'] = extra_data['accommodation_charge'] + guest_service_charge
+
+        # LoS discount details
+        extra_data['length_of_stay_discount_amount'] = los_discount_total
+
+        # Calculate LoS discount percentage (approximate)
+        if original_total > 0:
+            extra_data['length_of_stay_discount_percent'] = (los_discount_total / original_total) * 100
+        else:
+            extra_data['length_of_stay_discount_percent'] = 0.0
+
+        return extra_data
+
     def get(self, request, *args, **kwargs):
         invoice_no = kwargs.get("invoice_no")
         booking_obj = Booking.objects.select_related(
@@ -62,7 +104,21 @@ class HostReservationRetrieveAPIView(views.APIView):
         ).get(invoice_no=invoice_no)
 
         self.check_object_permissions(request, booking_obj)
-        data = BookingSerializer(booking_obj, r_method_fields=["listing"]).data
+
+        # Calculate extra data for the missing fields
+        extra_data = self._get_extra_booking_data(booking_obj)
+
+        # Create serializer context with extra data
+        context = {
+            'request': request,
+            'extra_data': extra_data
+        }
+
+        data = BookingSerializer(
+            booking_obj,
+            r_method_fields=["listing"],
+            context=context
+        ).data
 
         guest = booking_obj.guest
 
