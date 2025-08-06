@@ -617,6 +617,7 @@ class GuestBookingProcess:
             str(checkout_data_after_los.get("gateway_fee", "0.00")))  # Get gateway_fee from the latest checkout_data
         grand_total_payable = (final_price_to_pay + gateway_fee).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
+        original_total_before_discounts = float(total_accommodation_cost_before_los)
         # --- 6. Prepare Data for BookingSerializer ---
         data_for_serializer = {
             "invoice_no": identifier_builder(table_name="bookings_booking", prefix="BK"),
@@ -626,6 +627,9 @@ class GuestBookingProcess:
             "children_count": int(request_data.get("children_count", 0)),
             "adult_count": int(request_data.get("adult_count", 1)),
             "infant_count": int(request_data.get("infant_count", 0)),
+
+            "original_price_before_discount": original_total_before_discounts,
+            "total_discount_amount": float(total_los_discount_value + generic_coupon_discount_amount),
 
             # `price` on Booking model stores the average effective nightly rate after LoS discount
             "price": float((float(average_effective_nightly_price_after_los) * float(number_of_nights+1))),
@@ -658,8 +662,14 @@ class GuestBookingProcess:
             # Optional: Store LoS discount details if new fields on Booking model
             # "length_of_stay_discount_percent_applied": float(applied_los_discount_percent),
             # "total_length_of_stay_discount_value": float(total_los_discount_value),
+
+            "length_of_stay_discount_percent": float(applied_los_discount_percent),
+            "length_of_stay_discount_amount": float(total_los_discount_value),
+
         }
         data_for_serializer["guest_count"] = data_for_serializer["children_count"] + data_for_serializer["adult_count"]
+
+
 
         # `price_info` should reflect the daily breakdown *after* LoS discount
         data_for_serializer["price_info"] = {
@@ -706,6 +716,8 @@ class GuestBookingProcess:
                                  "listing_id": listing_id, "is_blocked": True, "is_booked": True}
         if current_group is not None: processed_calendar_info_for_booking.append(current_group)
         data_for_serializer["calendar_info"] = processed_calendar_info_for_booking
+
+        print(" === ", data_for_serializer, " ===")
 
         return {"status": 200, "message": coupon_validation_message, "data": data_for_serializer}
 

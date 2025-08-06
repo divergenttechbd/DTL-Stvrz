@@ -56,6 +56,14 @@ class BookingSerializer(DynamicFieldsModelSerializer):
         read_only=True,
         source='listingbookingreview_set'
     )
+
+    original_price_before_discount = serializers.SerializerMethodField()
+    total_discount_amount = serializers.SerializerMethodField()
+    accommodation_charge = serializers.SerializerMethodField()
+    subtotal_before_generic_coupon = serializers.SerializerMethodField()
+    length_of_stay_discount_percent = serializers.SerializerMethodField()
+    length_of_stay_discount_amount = serializers.SerializerMethodField()
+
     class Meta:
         model = Booking
         fields = "__all__"
@@ -63,6 +71,13 @@ class BookingSerializer(DynamicFieldsModelSerializer):
     def create(self, validated_data):
         # Check if test booking flag is passed (from GuestBookingProcess)
         is_test_booking = validated_data.pop("is_test_booking", False)
+
+        extra_fields = ['original_price_before_discount', 'total_discount_amount',
+                        'accommodation_charge', 'subtotal_before_generic_coupon',
+                        'length_of_stay_discount_percent', 'length_of_stay_discount_amount']
+
+        for field in extra_fields:
+            validated_data.pop(field, None)
 
         if is_test_booking:
             # Mark booking as paid, bypass gateway
@@ -90,6 +105,24 @@ class BookingSerializer(DynamicFieldsModelSerializer):
                 "address",
             ],
         ).data
+
+    def get_original_price_before_discount(self, obj):
+        return self.context.get('extra_data', {}).get('original_price_before_discount')
+
+    def get_total_discount_amount(self, obj):
+        return self.context.get('extra_data', {}).get('total_discount_amount')
+
+    def get_accommodation_charge(self, obj):
+        return self.context.get('extra_data', {}).get('accommodation_charge')
+
+    def get_subtotal_before_generic_coupon(self, obj):
+        return self.context.get('extra_data', {}).get('subtotal_before_generic_coupon')
+
+    def get_length_of_stay_discount_percent(self, obj):
+        return self.context.get('extra_data', {}).get('length_of_stay_discount_percent')
+
+    def get_length_of_stay_discount_amount(self, obj):
+        return self.context.get('extra_data', {}).get('length_of_stay_discount_amount')
 
     def get_guest(self, obj):
         return UserSerializer(

@@ -77,7 +77,18 @@ class GuestBookingListCreateAPIView(ListCreateAPIView):
                 {"message": processed_data["message"]}, status=processed_data["status"]
             )
 
-        serializer = self.serializer_class(data=processed_data["data"])
+        extra_fields = ['original_price_before_discount', 'total_discount_amount',
+                        'accommodation_charge', 'subtotal_before_generic_coupon',
+                        'length_of_stay_discount_percent', 'length_of_stay_discount_amount']
+
+        extra_data = {field: processed_data["data"].get(field) for field in extra_fields if
+                      field in processed_data["data"]}
+
+        # Create serializer with extra context
+        context = self.get_serializer_context()
+        context['extra_data'] = extra_data
+
+        serializer = self.serializer_class(data=processed_data["data"], context=context)
         if serializer.is_valid(raise_exception=True):
             serializer.save()
 
@@ -214,6 +225,48 @@ class GuestBookingRetrieveAPIView(views.APIView):
     permission_classes = (IsAuthenticated, IsGuestUser)
     swagger_tags = ["Gust Bookings"]
 
+    def _get_extra_booking_data(self, booking):
+        """
+        Calculate the missing fields that aren't stored in the model.
+        This mimics the calculation logic from GuestBookingProcess.
+        """
+        extra_data = {}
+
+        # Get the original prices from price_info
+        original_total = 0.0
+        los_discount_total = 0.0
+
+        if hasattr(booking, 'price_info') and booking.price_info:
+            for date_str, price_data in booking.price_info.items():
+                original_calendar_price = price_data.get('original_calendar_price', price_data.get('price', 0))
+                current_price = price_data.get('price', 0)
+
+                original_total += float(original_calendar_price)
+                los_discount_total += float(original_calendar_price) - float(current_price)
+
+        # Calculate fields
+        extra_data['original_price_before_discount'] = original_total
+        extra_data['accommodation_charge'] = float(booking.price) if booking.price else 0.0
+
+        # Calculate total discount (LoS + coupon)
+        coupon_discount = float(booking.discount_amount_applied) if booking.discount_amount_applied else 0.0
+        extra_data['total_discount_amount'] = los_discount_total + coupon_discount
+
+        # Calculate subtotal before coupon (accommodation + service charges)
+        guest_service_charge = float(booking.guest_service_charge) if booking.guest_service_charge else 0.0
+        extra_data['subtotal_before_generic_coupon'] = extra_data['accommodation_charge'] + guest_service_charge
+
+        # LoS discount details
+        extra_data['length_of_stay_discount_amount'] = los_discount_total
+
+        # Calculate LoS discount percentage (approximate)
+        if original_total > 0:
+            extra_data['length_of_stay_discount_percent'] = (los_discount_total / original_total) * 100
+        else:
+            extra_data['length_of_stay_discount_percent'] = 0.0
+
+        return extra_data
+
     @method_decorator(exception_handler)
     def get(self, request, *args, **kwargs):
         booking = Booking.objects.select_related("listing", "host").get(
@@ -222,11 +275,22 @@ class GuestBookingRetrieveAPIView(views.APIView):
             # status=BookingStatusOption.CONFIRMED,
         )
 
+        # Calculate extra data for the missing fields
+        extra_data = self._get_extra_booking_data(booking)
+
         result = {}
+
+        # Create serializer context with extra data
+        context = {
+            'request': request,
+            'extra_data': extra_data
+        }
+
         data = BookingSerializer(
             booking,
             many=False,
             r_method_fields=["listing", "host"],
+            context=context,
             fields=[
                 "id",
                 "invoice_no",
@@ -250,7 +314,14 @@ class GuestBookingRetrieveAPIView(views.APIView):
                 'discount_amount_applied',
                 'price_after_discount',
                 'applied_admin_coupon',
-                'applied_referral_coupon'
+                'applied_referral_coupon',
+                # Add the missing fields
+                'original_price_before_discount',
+                'total_discount_amount',
+                'accommodation_charge',
+                'subtotal_before_generic_coupon',
+                'length_of_stay_discount_percent',
+                'length_of_stay_discount_amount',
             ],
         ).data
 
@@ -269,6 +340,7 @@ class GuestBookingRetrieveAPIView(views.APIView):
                     "full_name": request.user.get_full_name(),
                     "created_at": str(guest_booking_review.created_at),
                 }
+
         with connect_mongo() as collections:
             guest = booking.guest
             listing = booking.listing
@@ -288,6 +360,7 @@ class GuestBookingRetrieveAPIView(views.APIView):
 
             # 4. Add the chat room ID to the result if found
             result["chat_room"] = str(chat_room.get("_id")) if chat_room else None
+
         return Response(result, status=status.HTTP_200_OK)
 
 
