@@ -99,19 +99,19 @@ export default function ChatHeaderDetail({
       </AvatarGroup>
 
       <Typography variant="subtitle2" marginLeft={2}>
-        {singleParticipant.username} {singleParticipant.username.endsWith('host') ? '(Host) ' : '(Guest) '},
+        {singleParticipant.full_name} {singleParticipant.username.endsWith('host') ? '(Host)' : '(Guest)'}, 
         {singleMutipleParticipant.length ?
           <>
             {singleMutipleParticipant
               .map(
                 (participant: any) =>
-                  `${participant.full_name} ${participant.username.endsWith('host') ? '(Host) ' : '(Guest) '
+                  `${participant.full_name} ${participant.username.endsWith('host') ? '(Host)' : '(Guest)'
                   }`
               )
               .join(', ')}
           </> :
           <>
-            {singleMutipleParticipant.username} {singleMutipleParticipant.username.endsWith('host') ? '(Host) ' : '(Guest) '}
+            {singleMutipleParticipant.full_name} {singleMutipleParticipant.username.endsWith('host') ? '(Host)' : '(Guest)'}
           </>
 
         }

@@ -12,7 +12,7 @@ type Props = {
 };
 
 export default function HostTableRow({ row }: Props) {
-  const { total_property, total_sell_amount, first_name, last_name, id } = row;
+  const { total_property, total_sell_amount, first_name, last_name, id, total_bookings } = row;
 
   return (
     <TableRow hover>
@@ -21,6 +21,7 @@ export default function HostTableRow({ row }: Props) {
           {first_name} {last_name}
         </Link>
       </TableCell>
+      <TableCell sx={{ whiteSpace: 'nowrap' }}>{total_bookings}</TableCell>
       <TableCell sx={{ whiteSpace: 'nowrap' }}>{total_property}</TableCell>
       <TableCell sx={{ whiteSpace: 'nowrap' }}>৳ {total_sell_amount?.toFixed(2)}</TableCell>
     </TableRow>

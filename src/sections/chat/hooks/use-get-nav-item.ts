@@ -14,7 +14,7 @@ export default function useGetNavItem({ currentUserId, conversation }: Props) {
 
   const group = true;
 
-  const displayName = `${conversation?.from_user?.full_name}, ${conversation.to_user?.length ? `${conversation.to_user[0]?.full_name}, ${conversation.to_user[1]?.full_name}` : conversation.to_user?.full_name}`;
+  const displayName = `${conversation?.from_user?.full_name.split(' ')[0]}, ${conversation.to_user?.length ? `${conversation.to_user[0]?.full_name.split(' ')[0]}, ${conversation.to_user[1]?.full_name.split(' ')[0]}` : conversation.to_user?.full_name.split(' ')[0]}`;
 
   const displayText = `${conversation?.latest_message?.user?.full_name || 'Admin'}: ${conversation.latest_message.content}`;
 

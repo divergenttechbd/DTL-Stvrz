@@ -42,6 +42,7 @@ const filterOptions = [
 ];
 
 const sortFieldFilterOptions = [
+  { label: 'Total Bookings', value: 'total_bookings' },
   { label: 'Total Sell Amount', value: 'total_sell_amount' },
   { label: 'Total Property', value: 'total_property' },
   { label: 'First Name', value: 'first_name' },
@@ -66,9 +67,10 @@ const TABLE_HEAD = [
 ];
 
 const HOST_TABLE_HEAD = [
-  { id: 'host', label: 'Host', width: 180 },
-  { id: 'property', label: 'Property', width: 180 },
-  { id: 'total', label: 'Total Amount', width: 100 },
+  { id: 'first_name', label: 'Host', width: 180 },
+  { id: 'total_bookings', label: 'Bookings', width: 180 },
+  { id: 'total_property', label: 'Property', width: 180 },
+  { id: 'total_sell_amount', label: 'Total Amount', width: 100 },
 ];
 
 export default function OverviewAppView() {
@@ -97,7 +99,7 @@ export default function OverviewAppView() {
     end_date,
     // topSellingFilter: 'MONTHLY',
     countStatFilter: 'MONTHLY',
-    sortField: 'total_sell_amount',
+    sortField: 'total_bookings',
     sortOrder: 'desc',
   });
 
