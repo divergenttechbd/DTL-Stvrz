@@ -38,6 +38,8 @@ def booking_confirmed_process(booking_id: str) -> None:
     host_usernames = [user.username for user in all_recipients]
     sorted_host_usernames = sorted(host_usernames)
     room_name = f"{guest.username}:{':'.join(sorted_host_usernames)}"
+
+    print(room_name, " room name")
     # --- END MODIFICATION ---
 
     with connect_mongo() as collections:
@@ -56,6 +58,8 @@ def booking_confirmed_process(booking_id: str) -> None:
 
         # Use the new canonical room name to find or create the chat room
         chat_room = collections["ChatRoom"].find_one({"name": room_name})
+
+        print(" chat_room ", chat_room)
 
         if not chat_room:
             created_room = collections["ChatRoom"].insert_one({
