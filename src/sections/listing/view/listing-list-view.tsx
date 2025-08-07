@@ -242,6 +242,7 @@ export default function TourListView({ fromUserDetails, userId }: ListingsListVi
         Address: entry?.address,
         Price: entry?.price,
         Host: entry?.owner?.full_name,
+        Phone: entry?.owner?.phone_number,
         "Total Bookings": entry?.total_booking_count,
         Status: entry?.status,
         Rating: entry?.avg_rating,
