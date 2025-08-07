@@ -1,4 +1,4 @@
-from firebase_admin import messaging # Assuming you've initialized firebase_admin
+from firebase_admin import messaging, exceptions # Assuming you've initialized firebase_admin
 from .models import FCMToken # Your FCMToken model
 from django.contrib.auth import get_user_model
 
@@ -40,7 +40,7 @@ def send_native_push_notification(user_id, title, body, data=None):
             # Optionally, deactivate the token or delete the FCMToken record
             # fcm_record.delete() # Or mark as inactive
             return False
-        except messaging.FirebaseError as e:
+        except exceptions.FirebaseError as e:
             print(f"PushService: Error sending FCM message to user ID {user_id} (token: {token[:20]}...): {e}")
             return False
         except Exception as e: # Catch any other error

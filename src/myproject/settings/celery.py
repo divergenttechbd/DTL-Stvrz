@@ -40,6 +40,7 @@ from celery import Celery
 from celery.schedules import crontab
 from pathlib import Path
 from dotenv import load_dotenv
+from datetime import timedelta
 
 # This part is fine, as it's setting up the environment for Django to find settings later.
 # It doesn't access settings itself.
@@ -60,29 +61,22 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "myproject.settings")
 # Define the Celery app
 celery_app = Celery("myproject")
 
-# This is the key: Tell Celery to use the Django settings file for its configuration.
-# The `namespace='CELERY'` part means it will look for settings starting with `CELERY_`
-# (e.g., CELERY_BROKER_URL, CELERY_TIMEZONE).
+
 celery_app.config_from_object("django.conf:settings", namespace="CELERY")
 
-# This automatically discovers task modules in your installed apps (e.g., notifications/tasks.py)
-# It's smart enough to wait until the app registry is ready.
 celery_app.autodiscover_tasks()
 
-# Define your beat schedule here. This is fine.
+
 celery_app.conf.beat_schedule = {
     'check-for-post-booking-notifications-daily': {
-        'task': 'notifications.tasks.check_and_send_post_booking_notifications_periodic',
-        # crontab is timezone-aware based on the Celery app's timezone
+        'task': 'check_and_send_post_booking_notifications_periodic',
+
         'schedule': crontab(hour='3', minute='30'),
+        # 'schedule': timedelta(seconds=10),
     },
     'assess-superhost-statuses-quarterly': {
-        'task': 'achievements.tasks.assess_and_log_quarterly_superhost_status',
+        'task': 'assess_and_log_quarterly_superhost_status',
         'schedule': crontab(day_of_month='1', month_of_year='1,4,7,10', hour="2", minute="0"),
     },
 }
 
-# DO NOT SET TIMEZONE DIRECTLY LIKE THIS:
-# celery_app.conf.timezone = settings.TIME_ZONE <-- This will also crash.
-
-# Instead, the timezone will be loaded from your Django settings via the
