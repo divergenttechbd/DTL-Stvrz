@@ -10,6 +10,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.generics import ListAPIView, views
 from rest_framework.response import Response
 from rest_framework import status
+from src.base.permissions import IsPrimaryHostOrActiveCoHost
+
 from base.helpers.classes import DTEncoder
 from base.helpers.decorators import exception_handler
 from base.permissions import HostUserHasObjectAccess, IsHostUser
@@ -52,7 +54,7 @@ class HostReservationListAPIView(ListAPIView):
 
 
 class HostReservationRetrieveAPIView(views.APIView):
-    permission_classes = (IsAuthenticated, IsHostUser, HostUserHasObjectAccess)
+    permission_classes = (IsAuthenticated, IsPrimaryHostOrActiveCoHost, )
     swagger_tags = ["Host Bookings"]
 
     def _get_extra_booking_data(self, booking):
