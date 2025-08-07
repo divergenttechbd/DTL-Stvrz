@@ -10,7 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.generics import ListAPIView, views
 from rest_framework.response import Response
 from rest_framework import status
-from src.base.permissions import IsPrimaryHostOrActiveCoHost
+from base.permissions import HostUserHasObjectAccess, IsHostUser, IsPrimaryHostOrActiveCoHost
 
 from base.helpers.classes import DTEncoder
 from base.helpers.decorators import exception_handler
@@ -54,7 +54,7 @@ class HostReservationListAPIView(ListAPIView):
 
 
 class HostReservationRetrieveAPIView(views.APIView):
-    permission_classes = (IsAuthenticated, IsPrimaryHostOrActiveCoHost, )
+    permission_classes = (IsAuthenticated,)
     swagger_tags = ["Host Bookings"]
 
     def _get_extra_booking_data(self, booking):
@@ -232,7 +232,7 @@ class HostBookingReviewRetrieveAPIView(views.APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        data = BookingReviewSerializer(booking_review, many=False), data
+        data = BookingReviewSerializer(booking_review, many=False),
         return Response(data, status=status.HTTP_200_OK)
 
 
