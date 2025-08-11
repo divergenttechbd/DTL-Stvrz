@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Sum, Q, F, OuterRef, Count, Subquery, Prefetch, DecimalField  # Added F
 from django.db.models.functions import Coalesce
+from django.forms import model_to_dict
 
 from django.utils import timezone
 from decimal import Decimal
@@ -15,7 +16,7 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi  # For swagger documentation
 
-
+from links.models import Link
 from .models import Referral, ReferralReward, Coupon, RewardStatus, CouponStatus, ReferralStatus, ReferralType
 from .serilizers import (
     ReferralSerializer,
@@ -73,8 +74,45 @@ class MyReferralLinkAPIView(views.APIView):
         )
         # If not created, it means an existing PENDING link for this type was found.
 
-        serializer = ReferralSerializer(referral_template, context={'request': request})
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        web_fallback_base_url = getattr(settings, 'WEB_FALLBACK_URL')
+        base_url = getattr(settings, 'FRONTEND_URL', 'https://stayverz.divergenttechbd.com')
+        register_path = getattr(settings, 'FRONTEND_REGISTER_PATH', '/register/ref')
+        target_url = f"{web_fallback_base_url}?ref={referral_template.referral_code}&ref_type={referral_template.referral_type}"
+
+
+        short_code = str(referral_template.referral_code).replace("-", "")[:12]
+        deep_link = f"stayverz://register/ref?ref={referral_template.referral_code}&ref_type={referral_template.referral_type}"
+        ios_store = getattr(settings, 'IOS_STORE_URL', "https://apps.apple.com/us/app/stayverz-seamless-experience/id6748875178")
+        android_store = getattr(settings, 'ANDROID_STORE_URL',
+                                f"https://play.google.com/store/apps/details?id=com.stayverz.stayverz&referrer={short_code}")
+
+        link_obj, created = Link.objects.get_or_create(
+            code=short_code,
+            defaults={
+                "title": f"Referral for {user.first_name or user.username}",
+                "target_url": target_url,
+                "deep_link_scheme": deep_link,
+                "ios_store_url": ios_store,
+                "android_store_url": android_store,
+                "meta": {
+                    'refer_code':str(referral_template.referral_code),
+                    "referrer_id": user.id,
+                    "referrer_username": user.username,
+                    "referrer_type": user.u_type,
+                    "referral_type": referral_template.referral_type,
+                    "status": referral_template.status,
+                },
+                "is_active": True,
+                "expire_at": None
+            }
+        )
+
+        print(model_to_dict(link_obj))
+
+        referral_data = ReferralSerializer(referral_template, context={'request': request}).data
+        referral_data["short_link"] = f"{settings.SHORT_LINK_DOMAIN}/r/{link_obj.code}"
+        # serializer = ReferralSerializer(referral_template, context={'request': request})
+        return Response(referral_data, status=status.HTTP_200_OK)
 
 
 class MyReferralsListAPIView(generics.ListAPIView):

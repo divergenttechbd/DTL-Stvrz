@@ -65,6 +65,12 @@ ENVIRONMENT = os.environ.get("ENVIRONMENT")
 
 GOOGLE_MAP_API_KEY = os.environ.get("GOOGLE_MAP_API_KEY")
 
+APP_BASE_URL = os.getenv("APP_BASE_URL", "https://btayverz.divergenttechbd.com")
+WEB_FALLBACK_URL = os.getenv("WEB_FALLBACK_URL", "https://btayverz.divergenttechbd.com/")
+IOS_STORE_URL = os.getenv("IOS_STORE_URL", "https://apps.apple.com/us/app/stayverz-seamless-experience/id6748875178")
+ANDROID_STORE_URL = os.getenv("ANDROID_STORE_URL", "https://play.google.com/store/apps/details?id=com.stayverz.stayverz")
+SHORT_LINK_DOMAIN = os.getenv("SHORT_LINK_DOMAIN", "https://btayverz.divergenttechbd.com")
+
 
 # SSL SMS
 SSL_STORE_ID = os.environ.get("SSL_STORE_ID")

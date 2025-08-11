@@ -339,7 +339,7 @@ refund
 
 
 
-cancell 
+cancel
     1000000 -> 
 
 celery =============
@@ -352,7 +352,11 @@ celery =============
     - tail -f /var/www/html/stayverz/DTL-Stayverz/logs/celery-worker.log
     - tail -f /var/www/html/stayverz/DTL-Stayverz/logs/celery-beat.log
 
+    nohup python manage.py runserver 192.168.7.26:8000 &
+    ps aux | grep manage.py
+    ps aux | grep 'celery'
 
+    //todo: otp setting / their fcm / dynamic link url
 
 
 

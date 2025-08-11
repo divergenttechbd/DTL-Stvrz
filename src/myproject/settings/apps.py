@@ -34,6 +34,7 @@ LOCAL_APPS = [
     "coupons",
     'quick_reply',
     'referrals',
+    'links',
     'bookings.apps.BookingsConfig'
 ]
 

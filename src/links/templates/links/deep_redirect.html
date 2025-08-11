@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Opening Stayverz…</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Poppins', system-ui, -apple-system, Roboto, sans-serif; background: linear-gradient(135deg, #FF9A3C, #FF6A3D); color: #fff; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; text-align: center; }
+    .container { background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 20px; padding: 35px 30px; max-width: 400px; width: 100%; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15); border: 1px solid rgba(255, 255, 255, 0.2); animation: fadeInUp 0.8s ease-out; }
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+    h2 { font-size: 24px; font-weight: 600; margin-bottom: 12px; color: #fff; }
+    p { font-size: 16px; color: rgba(255, 255, 255, 0.9); margin-bottom: 24px; }
+    #openBtn { display: inline-block; background: #fff; color: #FF6A3D; font-weight: 600; font-size: 16px; padding: 12px 28px; border-radius: 14px; text-decoration: none; box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15); transition: all 0.3s ease; border: 1px solid #fff; }
+    #openBtn:hover { background: #f9f9f9; transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2); }
+    .loader { width: 40px; height: 40px; border: 4px solid rgba(255, 255, 255, 0.3); border-top: 4px solid #fff; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 16px; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="loader"></div>
+    <h2>Opening the Stayverz app…</h2>
+    <p>If the app doesn't open automatically, tap below.</p>
+    <a id="openBtn" href="{{ web_fallback }}">Open in Browser</a>
+  </div>
+
+<script>
+(function(){
+  const isIOS = {{ is_ios|yesno:"true,false" }};
+  const isAndroid = {{ is_android|yesno:"true,false" }};
+  const deep = "{{ deep_scheme|escapejs }}";
+  const iosStore = "{{ ios_store|escapejs }}";
+  const androidStore = "{{ android_store|escapejs }}";
+  const universal = "{{ universal_url|escapejs }}";
+  const webFallback = "{{ web_fallback|escapejs }}";
+  const referralCode = "{{ referral_code|escapejs }}";
+
+  let pageHidden = false;
+  let redirectAttempted = false;
+
+  // Track page visibility
+  document.addEventListener("visibilitychange", () => {
+    pageHidden = document.hidden;
+  });
+  window.addEventListener("pagehide", () => {
+    pageHidden = true;
+  });
+
+  function buildDeepLinkWithReferral(baseDeepLink, referralCode) {
+    if (!baseDeepLink || !referralCode) return baseDeepLink;
+
+    // Add referral code to deep link
+    const separator = baseDeepLink.includes('?') ? '&' : '?';
+    return `${baseDeepLink}${separator}referral_code=${encodeURIComponent(referralCode)}`;
+  }
+
+  function attemptOpen() {
+    if (redirectAttempted) return;
+    redirectAttempted = true;
+
+    // Check if this is a retry (has 'dl=1' parameter)
+    const params = new URLSearchParams(window.location.search);
+    const isRetry = params.has('dl');
+
+    if (!isRetry) {
+      // First attempt: Try universal link/app link
+      console.log('Attempting universal link:', universal);
+      window.location = universal;
+
+      // Short timeout to see if universal link worked
+      setTimeout(() => {
+        if (pageHidden) return; // Universal link worked
+        fallbackStrategy();
+      }, 1000);
+    } else {
+      // This is already a fallback, go straight to backup strategies
+      fallbackStrategy();
+    }
+  }
+
+  function fallbackStrategy() {
+    if (pageHidden) return;
+
+    if (isAndroid) {
+      // Android: Try intent URL with referral code
+      const fallbackUrl = encodeURIComponent(webFallback);
+      const scheme = deep.split(':')[0] || 'stayverz';
+      const hostPath = deep.replace(/^.*?:\/\/([^#]*).*/, '$1');
+
+      // Build deep link with referral code
+      const deepLinkWithReferral = buildDeepLinkWithReferral(deep, referralCode);
+      const updatedHostPath = deepLinkWithReferral ? deepLinkWithReferral.replace(/^.*?:\/\/([^#]*).*/, '$1') : hostPath;
+
+      const intentUrl = `intent://${updatedHostPath}#Intent;package=com.stayverz.stayverz;scheme=${scheme};S.browser_fallback_url=${fallbackUrl};end`;
+
+      console.log('Attempting intent URL with referral:', intentUrl);
+      window.location.replace(intentUrl);
+
+      // If intent fails, go to Play Store after delay
+      setTimeout(() => {
+        if (!pageHidden) {
+          console.log('Redirecting to Android store:', androidStore);
+          window.location.replace(androidStore || webFallback);
+        }
+      }, 1500);
+
+    } else if (isIOS) {
+      // iOS: Try custom URL scheme with referral code
+      if (deep) {
+        const deepLinkWithReferral = buildDeepLinkWithReferral(deep, referralCode);
+        console.log('Attempting iOS deep link with referral:', deepLinkWithReferral);
+
+        // Create hidden iframe for iOS deep link attempt
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = deepLinkWithReferral || deep;
+        document.body.appendChild(iframe);
+
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+          if (!pageHidden) {
+            console.log('Redirecting to iOS store:', iosStore);
+            window.location.replace(iosStore || webFallback);
+          }
+        }, 1500);
+      } else {
+        window.location.replace(iosStore || webFallback);
+      }
+    } else {
+      // Desktop or unknown - go to web fallback
+      window.location.replace(webFallback);
+    }
+  }
+
+  // Store referral code in localStorage for app to pick up later
+  if (referralCode && typeof(Storage) !== "undefined") {
+    try {
+      localStorage.setItem('stayverz_referral_code', referralCode);
+      console.log('Stored referral code:', referralCode);
+    } catch (e) {
+      console.log('Could not store referral code:', e);
+    }
+  }
+
+  // Start the process after a brief delay
+  setTimeout(attemptOpen, 100);
+
+  // Backup timeout - if nothing happened after 3 seconds, force fallback
+  setTimeout(() => {
+    if (!pageHidden && !redirectAttempted) {
+      console.log('Forcing fallback after timeout');
+      window.location.replace(webFallback);
+    }
+  }, 3000);
+
+  // Update the manual open button to include referral tracking
+  document.getElementById('openBtn').addEventListener('click', function(e) {
+    if (referralCode) {
+      // Add referral code to the fallback URL if needed
+      const separator = webFallback.includes('?') ? '&' : '?';
+      const urlWithReferral = `${webFallback}${separator}referral_code=${encodeURIComponent(referralCode)}`;
+      this.href = urlWithReferral;
+    }
+  });
+})();
+</script>
+</body>
+</html>

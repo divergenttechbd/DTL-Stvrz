@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Get Stayverz App</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* Reset & Base Styles */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Poppins', system-ui, -apple-system, Roboto, sans-serif;
+      background: linear-gradient(135deg, #FF9A3C, #FF6A3D);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-radius: 20px;
+      padding: 30px 25px;
+      max-width: 420px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      animation: fadeInUp 0.8s ease-out;
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    h2 {
+      font-size: 28px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: #fff;
+    }
+
+    p {
+      font-size: 16px;
+      line-height: 1.6;
+      color: rgba(255, 255, 255, 0.95);
+      margin-bottom: 24px;
+    }
+
+    .referral-info {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .referral-code {
+      font-weight: 600;
+      font-size: 18px;
+      color: #fff;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .store-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    .store-buttons a {
+      display: inline-block;
+      transition: transform 0.3s ease, filter 0.3s ease;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .store-buttons a:hover {
+      transform: translateY(-5px);
+      filter: brightness(1.05);
+    }
+
+    .store-buttons img {
+      height: 55px;
+      border-radius: 10px;
+      display: block;
+    }
+
+    .note {
+      margin-top: 20px;
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .logo {
+      width: 70px;
+      height: 70px;
+      margin: 0 auto 16px;
+      background: #fff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      font-weight: bold;
+      color: #FF6A3D;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Optional: Add a simple Stayverz logo placeholder -->
+    <!-- <div class="logo">S</div> -->
+    <h2>Welcome to Stayverz</h2>
+
+    {% if referral_code %}
+    <div class="referral-info">
+      <p style="margin-bottom: 8px; font-size: 14px;">Your referral code:</p>
+      <div class="referral-code">{{ referral_code }}</div>
+    </div>
+    <p>To complete your registration with this referral code, please install and open the Stayverz mobile app.</p>
+    {% else %}
+    <p>To complete your registration with a referral, please install and open the Stayverz mobile app.</p>
+    {% endif %}
+
+    <div class="store-buttons">
+      <a href="{{ ios_store_url }}" target="_blank" class="store-link" data-store="ios">
+        <img src="https://cmsphoto.ww-cdn.com/superstatic/129568/art/grande/79767595-57712201.jpg?v=1713969716.0553339" alt="Download on the App Store">
+      </a>
+      <a href="{{ android_store_url }}" target="_blank" class="store-link" data-store="android">
+        <img src="https://platform.theverge.com/wp-content/uploads/sites/2/chorus/uploads/chorus_asset/file/2607380/Google_Play_Logo__black_.1331054061.jpg?quality=90&strip=all" alt="Get it on Google Play">
+      </a>
+    </div>
+
+    <p class="note">
+      <small>
+        {% if referral_code %}
+        If you already have the app, please open this link on your mobile device to apply the referral code.
+        {% else %}
+        If you already have the app, please open this link on your mobile device.
+        {% endif %}
+      </small>
+    </p>
+  </div>
+
+<script>
+(function(){
+  const referralCode = "{{ referral_code|escapejs }}";
+
+  // Store referral code in localStorage for the app to pick up
+  if (referralCode && typeof(Storage) !== "undefined") {
+    try {
+      localStorage.setItem('stayverz_referral_code', referralCode);
+      console.log('Stored referral code for app:', referralCode);
+    } catch (e) {
+      console.log('Could not store referral code:', e);
+    }
+  }
+
+  // Track store button clicks
+  document.querySelectorAll('.store-link').forEach(link => {
+    link.addEventListener('click', function(e) {
+      const store = this.getAttribute('data-store');
+      console.log(`User clicked ${store} store button${referralCode ? ' with referral code: ' + referralCode : ''}`);
+
+      // You can send analytics here if needed
+      // Analytics tracking code would go here
+    });
+  });
+
+  // Detect if user is on mobile and show appropriate message
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+  if (isMobile) {
+    // On mobile, we can try to trigger app opening after a short delay
+    setTimeout(() => {
+      // Try to open the app with custom scheme if available
+      if (referralCode) {
+        // Attempt to open app with referral code
+        const appScheme = `stayverz://referral?code=${encodeURIComponent(referralCode)}`;
+        window.location.href = appScheme;
+      }
+    }, 500);
+  }
+})();
+</script>
+</body>
+</html>

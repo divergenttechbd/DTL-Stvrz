@@ -22,6 +22,8 @@ User = get_user_model()
 
 @shared_task(name="myproject.payments.booking_confirmed_process")
 def booking_confirmed_process(booking_id: str) -> None:
+
+    print(" ========== booking in side task")
     try:
         booking = Booking.objects.select_related('guest', 'host', 'listing').get(id=booking_id)
     except Booking.DoesNotExist:
