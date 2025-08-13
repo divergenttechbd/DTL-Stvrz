@@ -42,6 +42,7 @@ class ListingCreateDataProcess:
         return None
 
     def process_listing_price(self, requested_price: float) -> None:
+        print(" ======== process_listing_price ", " == " )
         today = datetime.today()
         ListingCalendar.objects.create(
             listing_id=self.listing.id,
@@ -55,7 +56,7 @@ class ListingCreateDataProcess:
 
 
 class ListingCalendarDataProcess:
-    def __call__(self, data: dict, listing_id: str) -> dict:
+    def __call__(self, data: dict, listing: Listing) -> dict:
         from_date = data.get("from_date")
         to_date = data.get("to_date")
 
@@ -63,7 +64,7 @@ class ListingCalendarDataProcess:
             ListingCalendar.objects.filter(
                 Q(end_date__isnull=True)
                 | Q(start_date__lte=to_date, end_date__gte=from_date),
-                listing_id=listing_id,
+                listing_id=listing.id,
             ).values(
                 "id",
                 "start_date",
@@ -80,6 +81,20 @@ class ListingCalendarDataProcess:
         null_data = [entry for entry in listings if entry["end_date"] is None]
         listings = null_data + new_data
         formatted_data = {}
+
+        # if not listings:
+        #     for date_obj in date_range(from_date, to_date):
+        #         date_str = str(date_obj)
+        #         formatted_data[date_str] = {
+        #             "id": None,
+        #             "price": listing.price,
+        #             "is_blocked": False,
+        #             "is_booked": False,
+        #             "booking_data": None,
+        #             "note": None,
+        #         }
+        #     return formatted_data
+
 
         print("listing ----------- ", listings)
         for date_obj in date_range(from_date, to_date):
