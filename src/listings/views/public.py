@@ -486,31 +486,7 @@ class PublicListingRetrieveAPIView(RetrieveAPIView):
             r_method_fields=["review_by"],
         ).data
 
-        # data["checkout_data"] = {
-        #     "nights": 0,
-        #     "service_charge": 0.03,
-        #     "booking_price": 0,
-        #     "total_price": 0,
-        # }
 
-        # if request.GET.get("from_date") and request.GET.get("to_date"):
-        #     from_date = datetime.strptime(
-        #         request.GET.get("from_date"), "%Y-%m-%d"
-        #     ).date()
-        #     to_date = datetime.strptime(request.GET.get("to_date"), "%Y-%m-%d").date()
-        #     if from_date >= calendar_start_date and to_date >= calendar_start_date:
-        #         booking_date_info = {}
-        #         for c_date, data_entry in calendar_data.items():
-        #             c_date = datetime.strptime(c_date, "%Y-%m-%d").date()
-        #             if from_date <= c_date <= to_date:
-        #                 booking_date_info[str(c_date)] = data_entry
-
-        #         checkout_data = ListingCheckoutCalculate()(
-        #             booking_date_info=booking_date_info,
-        #             date_range={"from_date": from_date, "to_date": to_date},
-        #             instance=instance,
-        #         )
-        #         data["checkout_data"] = checkout_data
 
         return Response(data)
 

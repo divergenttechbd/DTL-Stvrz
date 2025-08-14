@@ -231,36 +231,6 @@ class HostListingCalendarApiView(views.APIView):
 
         formatted_data = request.data["data"]
 
-        # valid_price = all(
-        #     entry["price"] == formatted_data[0]["price"] for entry in formatted_data
-        # )
-        # valid_is_booked = all(not entry["is_booked"] for entry in formatted_data)
-
-        # if not (valid_price and valid_is_booked):
-        #     return Response(
-        #         data={"message": "Invalid data"},
-        #         status=status.HTTP_400_BAD_REQUEST,
-        #     )
-
-        # #  data formatting
-        # grouped_data = []
-        # current_group = None
-        # for item in formatted_data:
-        #     if current_group and current_group[-1]["is_blocked"] == item["is_blocked"]:
-        #         current_group[-1]["end_date"] = item["end_date"]
-        #     else:
-        #         current_group = [item]
-        #         grouped_data.append(current_group)
-
-        # result = []
-        # for group in grouped_data:
-        #     if len(group) > 1:
-        #         combined_dict = group[0].copy()
-        #         combined_dict["end_date"] = group[-1]["end_date"]
-        #         result.append(combined_dict)
-        #     else:
-        #         result.append(group[0])
-        #  data formatting
 
         for entry in formatted_data:
             start_date = entry["start_date"]

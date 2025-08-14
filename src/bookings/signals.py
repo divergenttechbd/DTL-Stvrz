@@ -156,159 +156,109 @@ def handle_booking_updates(sender, instance: Booking, created: bool, **kwargs):
         instance._coupon_usage_processed_signal = True
 
 
-def process_referral_rewards(instance: Booking):  # instance is a Booking object
+def process_referral_rewards(instance: Booking):
     """
-    Helper function to contain the referral reward logic.
-    Called by the main signal handler.
-    Assumes instance.status is already CONFIRMED.
-    MODIFIED to include lifetime earning caps.
+    Helper function for referral reward logic. Called by the main signal handler.
+    - GUEST: Awards points to BOTH the referrer and the referred guest.
+    - HOST: Awards commission to BOTH the referrer and the new host.
     """
-    print(f"Signal: Processing referral rewards for booking {instance.invoice_no}")
-    logger = logging.getLogger(__name__)  # Use logger for better output
+    logger = logging.getLogger(__name__)
+    logger.info(f"Signal: Processing referral rewards for booking {instance.invoice_no}")
 
-    booking_guest = instance.guest
-
-    # --- I. Guest earns points for THEIR OWN booking (ASSUMED NOT CAPPED BY REFERRAL LIFETIME LIMIT) ---
-    if booking_guest.u_type == UserTypeOption.GUEST:
-        # Add specific idempotency for self-points if booking can be saved multiple times when CONFIRMED
-        # e.g., if not instance.self_points_awarded_flag:
-        points_earned_for_self = int(Decimal(str(instance.total_price)) * GUEST_POINTS_PER_TAKA_SPENT)
-        if points_earned_for_self > 0:
-            User.objects.filter(pk=booking_guest.pk).update(points_balance=F('points_balance') + points_earned_for_self)
-            logger.info(
-                f"Guest {booking_guest.username} earned {points_earned_for_self} (self) points for booking {instance.invoice_no}.")
-            # instance.self_points_awarded_flag = True; # then save this specific field
-
-    # --- II. Referrer of a GUEST gets points (Guest-to-Guest referral) ---
-    # Idempotency: Check if a G2G ReferralReward for this booking already exists
-    if not ReferralReward.objects.filter(booking=instance,
-                                         referral__referral_type=ReferralType.GUEST_TO_GUEST).exists():
+    # --- I. Guest-to-Guest Referral: Both Referrer (A) and Referred (B) get points ---
+    if not ReferralReward.objects.filter(booking=instance, referral__referral_type=ReferralType.GUEST_TO_GUEST).exists():
+        booking_guest = instance.guest  # This is the referred user 'B'
         try:
-            guest_referral_instance = Referral.objects.select_related('referrer').get(
-                referred_user=booking_guest,  # The guest who made the booking
+            guest_referral = Referral.objects.select_related('referrer').get(
+                referred_user=booking_guest,
                 referral_type=ReferralType.GUEST_TO_GUEST,
                 status__in=[ReferralStatus.SIGNED_UP, ReferralStatus.COMPLETED]
             )
-            if guest_referral_instance.is_active_for_rewards:  # Checks 3-booking limit for this specific referral
-                referrer_guest_user = guest_referral_instance.referrer  # This is a User instance
-                if referrer_guest_user and referrer_guest_user.u_type == UserTypeOption.GUEST:
-                    potential_points_for_referrer = int(
-                        Decimal(str(instance.total_price)) * GUEST_POINTS_PER_TAKA_SPENT)
-
-                    if potential_points_for_referrer > 0:
-                        # Check lifetime cap for the referrer_guest_user
-                        can_earn, actual_points_to_award = referrer_guest_user.can_earn_more_referral_points(
-                            potential_points_for_referrer)
-
-                        if can_earn and actual_points_to_award > 0:
-                            User.objects.filter(pk=referrer_guest_user.pk).update(
-                                points_balance=F('points_balance') + actual_points_to_award,
-                                lifetime_referral_points_earned=F(
-                                    'lifetime_referral_points_earned') + actual_points_to_award
+            if guest_referral.is_active_for_rewards:
+                potential_points = int(Decimal(str(instance.total_price)) * GUEST_POINTS_PER_TAKA_SPENT)
+                if potential_points > 0:
+                    # --- Award to Referrer (A) ---
+                    referrer_user = guest_referral.referrer
+                    if referrer_user and referrer_user.u_type == UserTypeOption.GUEST:
+                        can_earn_ref, points_for_referrer = referrer_user.can_earn_more_referral_points(potential_points)
+                        if can_earn_ref and points_for_referrer > 0:
+                            User.objects.filter(pk=referrer_user.pk).update(
+                                points_balance=F('points_balance') + points_for_referrer,
+                                lifetime_referral_points_earned=F('lifetime_referral_points_earned') + points_for_referrer
                             )
-                            ReferralReward.objects.create(
-                                referral=guest_referral_instance, user=referrer_guest_user, booking=instance,
-                                amount=Decimal(actual_points_to_award), status=RewardStatus.CREDITED
-                            )
-                            logger.info(
-                                f"Referrer guest {referrer_guest_user.username} earned {actual_points_to_award} points (capped) from {booking_guest.username}'s booking {instance.invoice_no}.")
+                            ReferralReward.objects.create(referral=guest_referral, user=referrer_user, booking=instance, amount=Decimal(points_for_referrer), status=RewardStatus.CREDITED)
+                            logger.info(f"Referrer (A) {referrer_user.username} earned {points_for_referrer} points from {booking_guest.username}'s booking.")
 
-                            guest_referral_instance.rewarded_booking_count = F('rewarded_booking_count') + 1
-                            guest_referral_instance.save(update_fields=['rewarded_booking_count', 'updated_at'])
-                            guest_referral_instance.refresh_from_db()
-                            if guest_referral_instance.rewarded_booking_count >= guest_referral_instance.max_rewardable_bookings:
-                                guest_referral_instance.status = ReferralStatus.COMPLETED
-                                guest_referral_instance.save(update_fields=['status', 'updated_at'])
-                        else:
-                            logger.info(
-                                f"Referrer guest {referrer_guest_user.username} at/over lifetime points cap or potential points zero for booking {instance.invoice_no}.")
+                    # --- Award to Referred Guest (B) ---
+                    can_earn_new, points_for_new_guest = booking_guest.can_earn_more_referral_points(potential_points)
+                    if can_earn_new and points_for_new_guest > 0:
+                        User.objects.filter(pk=booking_guest.pk).update(
+                            points_balance=F('points_balance') + points_for_new_guest,
+                            lifetime_referral_points_earned=F('lifetime_referral_points_earned') + points_for_new_guest
+                        )
+                        ReferralReward.objects.create(referral=guest_referral, user=booking_guest, booking=instance, amount=Decimal(points_for_new_guest), status=RewardStatus.CREDITED)
+                        logger.info(f"Referred Guest (B) {booking_guest.username} earned {points_for_new_guest} bonus points for their booking.")
+
+                    # Update the referral link's booking count
+                    guest_referral.rewarded_booking_count = F('rewarded_booking_count') + 1
+                    guest_referral.save(update_fields=['rewarded_booking_count', 'updated_at'])
+                    guest_referral.refresh_from_db()
+                    if guest_referral.rewarded_booking_count >= guest_referral.max_rewardable_bookings:
+                        guest_referral.status = ReferralStatus.COMPLETED
+                        guest_referral.save(update_fields=['status', 'updated_at'])
         except Referral.DoesNotExist:
             pass  # No G2G referral for this guest
-        except User.DoesNotExist:  # Should be caught by FK constraints ideally
-            logger.warning(
-                f"User (referrer) not found for G2G referral related to booking {instance.invoice_no} for guest {booking_guest.username}.")
     else:
-        logger.info(f"Booking {instance.invoice_no}: G2G referral rewards already processed or exist.")
+        logger.info(f"Booking {instance.invoice_no}: G2G referral rewards already processed.")
 
-    # --- III. Referrer of a HOST and the new HOST get commission (Host-to-Host referral) ---
-    # Idempotency: Check if H2H ReferralReward for this booking already exists
+    # --- II. Host-to-Host Referral: Both Referrer and New Host get commission ---
     if not ReferralReward.objects.filter(booking=instance, referral__referral_type=ReferralType.HOST_TO_HOST).exists():
-        property_host = instance.host  # The host whose property was booked
+        property_host = instance.host
         if property_host.u_type == UserTypeOption.HOST:
             try:
-                host_referral_instance = Referral.objects.select_related('referrer').get(
+                host_referral = Referral.objects.select_related('referrer').get(
                     referred_user=property_host,
                     referral_type=ReferralType.HOST_TO_HOST,
                     status__in=[ReferralStatus.HOST_ACTIVE, ReferralStatus.COMPLETED]
                 )
-                if host_referral_instance.is_active_for_rewards:  # Checks 3-booking limit for this specific referral
-                    original_referrer_host_user = host_referral_instance.referrer
-                    newly_referred_host_user = property_host  # This is host_referral_instance.referred_user
-
-                    potential_commission_amount = (
-                            Decimal(str(instance.total_price)) * HOST_REFERRAL_COMMISSION_RATE).quantize(
-                        Decimal('0.01'))
-
-                    if potential_commission_amount > 0:
-                        # --- Award to ORIGINAL REFERRER (e.g., Xavier) ---
-                        if original_referrer_host_user:
-                            can_earn_ref, actual_taka_for_referrer = original_referrer_host_user.can_earn_more_referral_taka(
-                                potential_commission_amount)
-                            if can_earn_ref and actual_taka_for_referrer > 0:
-                                User.objects.filter(pk=original_referrer_host_user.pk).update(
-                                    host_referral_credit_balance=F(
-                                        'host_referral_credit_balance') + actual_taka_for_referrer,
-                                    lifetime_referral_taka_earned=F(
-                                        'lifetime_referral_taka_earned') + actual_taka_for_referrer
+                if host_referral.is_active_for_rewards:
+                    commission_amount = (Decimal(str(instance.total_price)) * HOST_REFERRAL_COMMISSION_RATE).quantize(Decimal('0.01'))
+                    if commission_amount > 0:
+                        # --- Award to Original Referrer Host ---
+                        referrer_host = host_referral.referrer
+                        if referrer_host:
+                            can_earn_ref, taka_for_referrer = referrer_host.can_earn_more_referral_taka(commission_amount)
+                            if can_earn_ref and taka_for_referrer > 0:
+                                User.objects.filter(pk=referrer_host.pk).update(
+                                    host_referral_credit_balance=F('host_referral_credit_balance') + taka_for_referrer,
+                                    lifetime_referral_taka_earned=F('lifetime_referral_taka_earned') + taka_for_referrer
                                 )
-                                ReferralReward.objects.create(
-                                    referral=host_referral_instance, user=original_referrer_host_user,
-                                    booking=instance, amount=actual_taka_for_referrer, status=RewardStatus.CREDITED
-                                )
-                                logger.info(
-                                    f"Original referrer host {original_referrer_host_user.username} credited {actual_taka_for_referrer} Taka (capped) for booking {instance.invoice_no}.")
-                            else:
-                                logger.info(
-                                    f"Original referrer host {original_referrer_host_user.username} at/over lifetime Taka cap or potential commission zero for booking {instance.invoice_no}.")
+                                ReferralReward.objects.create(referral=host_referral, user=referrer_host, booking=instance, amount=taka_for_referrer, status=RewardStatus.CREDITED)
+                                logger.info(f"Referrer host {referrer_host.username} credited {taka_for_referrer} Taka for booking.")
 
-                        # --- Award to NEWLY REFERRED HOST (e.g., Yara) as bonus ---
-                        if newly_referred_host_user:  # Should always exist
-                            can_earn_new, actual_taka_for_new_host = newly_referred_host_user.can_earn_more_referral_taka(
-                                potential_commission_amount)
-                            if can_earn_new and actual_taka_for_new_host > 0:
-                                User.objects.filter(pk=newly_referred_host_user.pk).update(
-                                    host_referral_credit_balance=F(
-                                        'host_referral_credit_balance') + actual_taka_for_new_host,
-                                    lifetime_referral_taka_earned=F(
-                                        'lifetime_referral_taka_earned') + actual_taka_for_new_host
-                                )
-                                ReferralReward.objects.create(
-                                    referral=host_referral_instance, user=newly_referred_host_user,
-                                    booking=instance, amount=actual_taka_for_new_host, status=RewardStatus.CREDITED
-                                )
-                                logger.info(
-                                    f"Newly referred host {newly_referred_host_user.username} credited {actual_taka_for_new_host} Taka (bonus, capped) for booking {instance.invoice_no}.")
-                            else:
-                                logger.info(
-                                    f"Newly referred host {newly_referred_host_user.username} at/over lifetime Taka cap or potential commission zero for booking {instance.invoice_no}.")
+                        # --- Award to Newly Referred Host ---
+                        new_host = property_host
+                        can_earn_new, taka_for_new_host = new_host.can_earn_more_referral_taka(commission_amount)
+                        if can_earn_new and taka_for_new_host > 0:
+                            User.objects.filter(pk=new_host.pk).update(
+                                host_referral_credit_balance=F('host_referral_credit_balance') + taka_for_new_host,
+                                lifetime_referral_taka_earned=F('lifetime_referral_taka_earned') + taka_for_new_host
+                            )
+                            ReferralReward.objects.create(referral=host_referral, user=new_host, booking=instance, amount=taka_for_new_host, status=RewardStatus.CREDITED)
+                            logger.info(f"Newly referred host {new_host.username} credited {taka_for_new_host} Taka (bonus) for booking.")
 
-                        # Update referral instance's booking count (applies to the referral link itself)
-                        # This happens even if an individual user hit their lifetime cap for this specific reward,
-                        # as the booking still counts towards the link's 3-booking limit.
-                        if original_referrer_host_user or newly_referred_host_user:  # Only if any reward was attempted
-                            host_referral_instance.rewarded_booking_count = F('rewarded_booking_count') + 1
-                            host_referral_instance.save(update_fields=['rewarded_booking_count', 'updated_at'])
-                            host_referral_instance.refresh_from_db()
-                            if host_referral_instance.rewarded_booking_count >= host_referral_instance.max_rewardable_bookings:
-                                host_referral_instance.status = ReferralStatus.COMPLETED
-                                host_referral_instance.save(update_fields=['status', 'updated_at'])
+                        # Update referral instance's booking count
+                        host_referral.rewarded_booking_count = F('rewarded_booking_count') + 1
+                        host_referral.save(update_fields=['rewarded_booking_count', 'updated_at'])
+                        host_referral.refresh_from_db()
+                        if host_referral.rewarded_booking_count >= host_referral.max_rewardable_bookings:
+                            host_referral.status = ReferralStatus.COMPLETED
+                            host_referral.save(update_fields=['status', 'updated_at'])
             except Referral.DoesNotExist:
                 pass  # No H2H referral for this host
-            except User.DoesNotExist:
-                logger.warning(
-                    f"User (referrer or referred) not found for H2H referral related to booking {instance.invoice_no} for host {property_host.username}.")
     else:
-        logger.info(f"Booking {instance.invoice_no}: H2H referral rewards already processed or exist.")
+        logger.info(f"Booking {instance.invoice_no}: H2H referral rewards already processed.")
+
 
 @receiver(post_save, sender=Booking)
 @transaction.atomic
