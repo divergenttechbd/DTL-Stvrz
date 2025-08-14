@@ -56,7 +56,7 @@ class ListingCreateDataProcess:
 
 
 class ListingCalendarDataProcess:
-    def __call__(self, data: dict, listing: Listing) -> dict:
+    def __call__(self, data: dict, listing_id: str) -> dict:
         from_date = data.get("from_date")
         to_date = data.get("to_date")
 
@@ -64,7 +64,7 @@ class ListingCalendarDataProcess:
             ListingCalendar.objects.filter(
                 Q(end_date__isnull=True)
                 | Q(start_date__lte=to_date, end_date__gte=from_date),
-                listing_id=listing.id,
+                listing_id=listing_id,
             ).values(
                 "id",
                 "start_date",

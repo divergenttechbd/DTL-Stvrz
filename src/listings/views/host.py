@@ -282,7 +282,7 @@ class HostListingCalendarApiView(views.APIView):
                     request.GET.get("to_date"), "%Y-%m-%d"
                 ).date(),
             }
-            calendar_data = ListingCalendarDataProcess()(query_data, listing)
+            calendar_data = ListingCalendarDataProcess()(query_data, listing_id)
 
         service_charges = list(ServiceCharge.objects.values())
         guest_service_charge = 0
