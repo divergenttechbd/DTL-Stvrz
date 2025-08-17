@@ -16,7 +16,7 @@ from base.type_choices import ListingStatusOption, ServiceChargeTypeOption
 from bookings.models import ListingBookingReview
 from bookings.serializers import BookingReviewSerializer
 from configurations.models import ServiceCharge
-from listings.filters import PublicListingFilter
+from listings.filters import PublicListingFilter, PublicListingFilterR
 from listings.models import Amenity, Category, Listing
 
 from listings.serializers import ListingSerializer, ListingAmenitySerializer, ListingSerializerM
@@ -73,7 +73,7 @@ class PublicListingListAPIView(ListAPIView):
         )
 
 
-
+from django_filters.rest_framework import DjangoFilterBackend
 class SimpleRandomPriorityAPIView(ListAPIView):
     """
     Simplified version that randomly rotates between the three criteria
@@ -81,7 +81,8 @@ class SimpleRandomPriorityAPIView(ListAPIView):
     """
     permission_classes = (AllowAny,)
     serializer_class = ListingSerializerM
-    filterset_class = PublicListingFilter
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = PublicListingFilterR
     swagger_tags = ["Public Listings"]
 
 
@@ -156,7 +157,7 @@ class SimpleRandomPriorityAPIView(ListAPIView):
         # Apply ordering
         if self.request.GET.get("latitude") and self.request.GET.get("longitude"):
             # For location searches: priority -> distance -> created_at
-            return queryset.order_by('-is_priority', 'distance', '-created_at')
+            return queryset.order_by('distance', '-is_priority', '-created_at')
         else:
             # For general searches: priority -> created_at
             return queryset.order_by('-is_priority', '-created_at')
