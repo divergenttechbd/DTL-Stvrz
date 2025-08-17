@@ -142,7 +142,7 @@ class ListingCheckoutCalculate:
         pass_night_check = instance.minimum_nights <= nights <= instance.maximum_nights
 
         if is_blocked_true or not pass_night_check:
-            message = f"Room is blocked, or it does not pass minimum {instance.minimum_nights} and maximum {instance.maximum_nights} night check."
+            message = f"Room already blocked."
             return {"message": message, "status": 400}
 
         data = {}
