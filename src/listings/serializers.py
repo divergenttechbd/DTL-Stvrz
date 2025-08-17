@@ -451,6 +451,7 @@ class CoHostedListingDetailSerializer(serializers.ModelSerializer):
     Shows details of a listing that the current user is co-hosting.
     """
     listing_id = serializers.IntegerField(source='listing.id', read_only=True)
+    status = serializers.CharField(source='listing.status', read_only=True)
     title = serializers.CharField(source='listing.title', read_only=True)
     address = serializers.CharField(source='listing.address', read_only=True)
     cover_photo = serializers.URLField(source='listing.cover_photo', read_only=True, allow_null=True)
@@ -466,6 +467,7 @@ class CoHostedListingDetailSerializer(serializers.ModelSerializer):
             'listing_id',
             'unique_id',
             'title',
+            'status',
             'address',
             'cover_photo',
             'price',
