@@ -22,13 +22,12 @@ type Props = {
 };
 
 export default function UserNewEditForm({ currentUser, getUserDetails }: Props) {
-  console.log('currentUser', currentUser);
+  // console.log('currentUser', currentUser);
   const [open, setOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState('');
   const [verificationAction, setVerificationAction] = useState<'' | 'verified' | 'rejected'>('');
   const [reason, setReason] = useState<string>('');
   const [snackbarOpen, setSnackbarOpen] = useState(false);
-
 
   const { handleSubmit, register, reset } = useForm({
     defaultValues: {
@@ -48,11 +47,11 @@ export default function UserNewEditForm({ currentUser, getUserDetails }: Props) 
         email: data?.email,
       });
       console.log('response', res)
-      if (!res.success) throw res.data;
+      if(!res.success) throw res.data;
       getUserDetails?.();
       setVerificationAction('');
       setSnackbarOpen(true);
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   };
@@ -75,10 +74,10 @@ export default function UserNewEditForm({ currentUser, getUserDetails }: Props) 
         identity_status: verificationAction,
         reject_reason: verificationAction === 'rejected' ? reason : '',
       });
-      if (!res.success) throw res.data;
+      if(!res.success) throw res.data;
       getUserDetails?.();
       setVerificationAction('');
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   }, [currentUser?.id, getUserDetails, reason, verificationAction]);
@@ -89,10 +88,10 @@ export default function UserNewEditForm({ currentUser, getUserDetails }: Props) 
         id: currentUser?.id,
         user_status: currentUser?.status === 'active' ? 'restricted' : 'active',
       });
-      if (!res.success) throw res.data;
+      if(!res.success) throw res.data;
       getUserDetails?.();
       setVerificationAction('');
-    } catch (err) {
+    } catch(err) {
       console.log(err);
     }
   }, [currentUser?.id, currentUser?.status, getUserDetails]);
@@ -111,7 +110,7 @@ export default function UserNewEditForm({ currentUser, getUserDetails }: Props) 
 
   // eslint-disable-next-line @typescript-eslint/no-shadow
   const handleSnackbarClose = (event?: React.SyntheticEvent | Event, reason?: string) => {
-    if (reason === 'clickaway') {
+    if(reason === 'clickaway') {
       return;
     }
 
@@ -124,14 +123,14 @@ export default function UserNewEditForm({ currentUser, getUserDetails }: Props) 
           {currentUser && (
             <Label
               color={
-                (currentUser.identity_verification_status === 'pending' && 'warning') ||
-                (currentUser.identity_verification_status === 'verified' && 'success') ||
-                (currentUser.identity_verification_status === 'rejected' && 'error') ||
+                (currentUser?.identity_verification_status === 'pending' && 'warning') ||
+                (currentUser?.identity_verification_status === 'verified' && 'success') ||
+                (currentUser?.identity_verification_status === 'rejected' && 'error') ||
                 'warning'
               }
               sx={{ position: 'absolute', top: 24, right: 24 }}
             >
-              {currentUser.identity_verification_status}
+              {currentUser?.identity_verification_status}
             </Label>
           )}
 
@@ -155,13 +154,13 @@ export default function UserNewEditForm({ currentUser, getUserDetails }: Props) 
               <Typography variant="body1" sx={{ my: 1 }}>
                 +88 {currentUser.phone_number}
               </Typography>
-              {currentUser.profile?.languages?.length && (
+              {currentUser?.profile?.languages?.length && (
                 <Typography variant="subtitle2">
-                  Speaks: {currentUser.profile.languages.join(', ')}
+                  Speaks: {currentUser?.profile.languages.join(', ')}
                 </Typography>
               )}
               <Typography variant="subtitle2" sx={{ my: 1 }}>
-                {currentUser.profile?.bio}
+                {currentUser?.profile?.bio}
               </Typography>
             </Stack>
           )}
@@ -277,33 +276,69 @@ export default function UserNewEditForm({ currentUser, getUserDetails }: Props) 
 
 
           {/* Live Verification Photo */}
-          {currentUser?.identity_verification_images?.live && (
+          {currentUser?.identity_verification_method === "live" && (
             <Typography variant="body1" sx={{ marginTop: '1rem' }}>
               Verification &nbsp;
               <b>({startCase(currentUser?.identity_verification_method?.split('_').join(' '))})</b>
             </Typography>
           )}
-          <Box
-            rowGap={3}
-            columnGap={2}
-            display="grid"
-            gridTemplateColumns={{
-              xs: 'repeat(1, 1fr)',
-              sm: 'repeat(2, 1fr)',
-            }}
-          >
-            {currentUser?.identity_verification_images?.live && (
-              <Button
-                onClick={handleClickOpen(currentUser?.identity_verification_images?.live)}
-              >
-                <img
-                  src={currentUser?.identity_verification_images?.live}
-                  alt="Front"
-                  style={{ cursor: 'pointer', width: '100%', borderRadius: '8px' }}
-                />
-              </Button>
-            )}
-          </Box>
+
+          <>
+            {/* First image full width */}
+            {currentUser?.identity_verification_method === "live" &&
+              currentUser?.identity_verification_images?.live && (() => {
+                const images = currentUser.identity_verification_images.live.split(",");
+                const firstImage = images[0];
+                const restImages = images.slice(1);
+
+                return (
+                  <>
+                    {/* Show first image separately on top */}
+                    <Box mb={3}>
+                      <Button onClick={handleClickOpen(firstImage)}>
+                        <img
+                          src={firstImage}
+                          alt="identity-0"
+                          style={{
+                            cursor: "pointer",
+                            width: "100%",
+                            height: "440px",
+                            borderRadius: "8px",
+                          }}
+                        />
+                      </Button>
+                    </Box>
+
+                    {/* Show rest of the images in a grid */}
+                    <Box
+                      rowGap={3}
+                      columnGap={2}
+                      display="grid"
+                      gridTemplateColumns={{
+                        xs: "repeat(1, 1fr)",
+                        sm: "repeat(2, 1fr)",
+                      }}
+                    >
+                      {restImages.map((url, index) => (
+                        <Button key={index + 1} onClick={handleClickOpen(url)}>
+                          <img
+                            src={url}
+                            alt={`identity-${index + 1}`}
+                            style={{
+                              cursor: "pointer",
+                              width: "100%",
+                              borderRadius: "8px",
+                            }}
+                          />
+                        </Button>
+                      ))}
+                    </Box>
+                  </>
+                );
+              })()}
+          </>
+
+
           {/* Live Verification Photo */}
 
 
