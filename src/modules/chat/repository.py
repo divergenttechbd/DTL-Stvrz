@@ -232,56 +232,39 @@ class ChatRepository(BaseRepository):
         Correctly and efficiently counts the total number of unread messages for a user
         across all their chat rooms using a single, efficient query.
         """
-        print(f"Counting unread messages for user {user_id} of type {u_type}")
         user_obj_id = PydanticObjectId(user_id)
 
-        # 1. Define a filter to find all chat rooms the user is a part of.
+        # Get the MongoDB collection directly
+        chat_room_collection = ChatRoom.get_motor_collection()
+        message_collection = Message.get_motor_collection()
+
+        # Find user's chat rooms
         if u_type == UserTypeOption.GUEST:
-            room_filter = (ChatRoom.from_user.id == user_obj_id,)
-        else:  # Handles HOST and CO-HOST
-            # FIXED: Handle both single Link and array of Links for to_user
-            print(ChatRoom.to_user, " to user ", user_obj_id)
-            room_filter = (
-                Or(
-                    # Case: to_user is a single User ref
-                    ChatRoom.to_user.id == user_obj_id,
-                    # Case: to_user is an array of User refs
-                    ElemMatch(ChatRoom.to_user, {"id": user_obj_id})
-                ),
-            )
+            room_query = {"from_user.$id": user_obj_id}
+        else:
+            room_query = {
+                "$or": [
+                    {"to_user.$id": user_obj_id},
+                    {"to_user": {"$elemMatch": {"$id": user_obj_id}}}
+                ]
+            }
 
-        print(f"Room filter: {room_filter}")
-
-        # 2. Get a list of only the IDs of those rooms for efficiency.
-        user_all_chat_rooms = await ChatRoom.find(*room_filter).to_list()
-        room_ids = [room.id for room in user_all_chat_rooms]
-
-        print(f"User has {len(room_ids)} chat  rooms: {room_ids}")
+        # Get room IDs
+        chat_rooms = await chat_room_collection.find(room_query, {"_id": 1}).to_list(None)
+        room_ids = [room["_id"] for room in chat_rooms]
 
         if not room_ids:
-            print("No chat rooms found for user")
             return 0
 
-        # 3. Count all messages within those rooms where the sender is NOT the current user
-        #    and the message is marked as unread.
+        # Count unread messages
+        message_query = {
+            "chat_room.$id": {"$in": room_ids},
+            "user.$id": {"$ne": user_obj_id},
+            "is_read": False,
+            "m_type": "normal"
+        }
 
-        unread_countx = await Message.find(
-            In(Message.chat_room.id, room_ids),
-            Message.user.id != user_obj_id,
-            Message.is_read == False,
-            Message.m_type == "normal"
-        ).to_list()
-
-        print(unread_countx)
-
-        unread_count = await Message.find(
-            In(Message.chat_room.id, room_ids),
-            Message.user.id != user_obj_id,
-            Message.is_read == False,
-            Message.m_type == "normal"
-        ).count()
-
-        print(f"Found {unread_count} unread messages for user {user_id}")
+        unread_count = await message_collection.count_documents(message_query)
         return unread_count
 
     async def mark_messages_as_read(
