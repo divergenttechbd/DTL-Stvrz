@@ -248,7 +248,8 @@ def is_contact_info_present(message: str) -> bool:
     return False
 
 def custom_encoder(obj):
-    if hasattr(obj, 'model_dump'):
+    """A robust JSON encoder for Pydantic V2."""
+    if isinstance(obj, BaseModel):
         return obj.model_dump()
     if isinstance(obj, (ObjectId, PydanticObjectId)):
         return str(obj)
@@ -256,7 +257,6 @@ def custom_encoder(obj):
         return obj.isoformat()
     if isinstance(obj, Enum):
         return obj.value
-    # This will catch any other types that are not serializable
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 
@@ -357,45 +357,62 @@ async def websocket_user_chat_stat(
     chat_service: ChatService = Depends(Container().get_chat_service),
 ) -> None:
     await websocket.accept()
-
     current_user = websocket.state.user
 
-    # await broadcast.publish(
-    #     channel=f"chat_stat_{current_user.username}",
-    #     message=json.dumps({"action": "chat_stat", "user": current_user.username}),
-    # )
+    try:
+        # The service method now directly returns an integer.
 
-    async with anyio.create_task_group() as task_group:
-
-        async def run_user_chat_stat() -> None:
-            await user_chat_stat(websocket=websocket, current_user=current_user)
-            task_group.cancel_scope.cancel()
-
-        task_group.start_soon(run_user_chat_stat)
-        await user_chat_stat_ws_sender(
-            websocket=websocket, current_user_id=str(current_user.id)
+        initial_count = await chat_service.get_user_unread_message_count(
+            user_id=str(current_user.id), u_type=current_user.u_type
         )
 
+        await websocket.send_text(json.dumps({"count": initial_count}))
 
-async def user_chat_stat_ws_sender(websocket: WebSocket, current_user_id: str):
-    async with broadcast.subscribe(
-        channel=f"chat_stat_{current_user_id}"
-    ) as subscriber:
+        async with anyio.create_task_group() as task_group:
+            async def receiver_task():
+                await user_chat_stat_receiver(websocket)
+                task_group.cancel_scope.cancel()
+
+            task_group.start_soon(receiver_task)
+            await user_chat_stat_sender(websocket, current_user, chat_service)
+
+    except WebSocketDisconnect:
+        print(f"User {current_user.username} disconnected from chat-stat.")
+    except Exception as e:
+        print(f"An error occurred in chat-stat websocket: {e}")
+        try:
+            await websocket.send_text(json.dumps({"error": "Internal server error", "count": 0}))
+        except:
+            pass
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+
+
+async def user_chat_stat_sender(
+    websocket: WebSocket, current_user: User, chat_service: ChatService
+):
+    channel = f"chat_stat_{current_user.id}"
+    async with broadcast.subscribe(channel=channel) as subscriber:
         async for event in subscriber:
-            await websocket.send_text(event.message)
+            try:
+                # The service method directly returns an integer.
+                new_count = await chat_service.get_user_unread_message_count(
+                    user_id=str(current_user.id), u_type=current_user.u_type
+                )
+
+                await websocket.send_text(json.dumps({"count": new_count}))
+
+            except Exception as e:
+                print(f"Error in user_chat_stat_sender: {e}")
+                try:
+                    await websocket.send_text(json.dumps({"error": "Failed to get count", "count": 0}))
+                except:
+                    pass
 
 
-async def user_chat_stat(websocket, current_user):
+async def user_chat_stat_receiver(websocket: WebSocket):
     try:
         while True:
-            message = await websocket.receive_text()
-            await broadcast.publish(
-                channel=f"chat_stat_{current_user.id}", message=message
-            )
-            async for message in websocket.iter_text():
-                await broadcast.publish(
-                    channel=f"user_global_room_{current_user.id}", message=message
-                )
+            await websocket.receive_text()
     except WebSocketDisconnect:
         pass
 
@@ -498,7 +515,11 @@ async def chatroom_ws_receiver(
                 continue
 
             try:
+                action = body.get("action")
                 if body.get("action") == "message":
+
+                    if chat_room.status == RoomStatusEnum.CLOSED:
+                        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
 
                     message_content = body.get("message", "")
 
@@ -636,6 +657,96 @@ async def chatroom_ws_receiver(
                         await broadcast.publish(
                             channel=channel_name,
                             message=message_to_broadcast,
+                        )
+
+                    for participant_id in other_participants_ids:
+                        await broadcast.publish(
+                            channel=f"chat_stat_{participant_id}",
+                            message=json.dumps({"action": "update_count"})
+                        )
+
+                    for participant_id in other_participants_ids:
+                        other_user = await chat_service.get_by_id(id=participant_id)
+                        if not other_user: continue
+
+                        # is_mobile_user = await Cache.get(key=f":1:user_mobile_logged_in_{other_user.username}")
+                        if other_user.fcm_token:
+                            fcm_title = "New Message"
+                            fcm_body = "You've got a new message"
+                            fcm_data = {
+                                "url": (
+                                    f"/host-dashboard/inbox?conversation_id={str(chat_room.id)}"
+                                    if other_user.u_type == UserTypeOption.HOST
+                                    else f"/messages?conversation_id={str(chat_room.id)}"
+                                )
+                            }
+                            send_fcm_notification(other_user.fcm_token, fcm_title, fcm_body, fcm_data)
+
+
+                elif body.get("action") == "is_read":
+                    print(f"Marking messages as read for user {current_user.id} in room {chat_room.id}")
+
+                    # Mark messages as read
+                    await chat_service.mark_messages_as_read(
+                        chat_room_id=chat_room.id, reader_id=current_user.id
+                    )
+
+                    print("Messages marked as read, broadcasting updates...")
+
+                    # Broadcast to OTHER participants' global rooms that messages were read
+                    for participant_id in other_participants_ids:
+                        await broadcast.publish(
+                            channel=f"user_global_room_{participant_id}",
+                            message=json.dumps({
+                                "action": "read_done",
+                                "room_id": str(chat_room.id),
+                                "reader_id": str(current_user.id)
+                            }),
+                        )
+
+                    # Update chat stat count for the CURRENT USER (who read the messages)
+                    await broadcast.publish(
+                        channel=f"chat_stat_{str(current_user.id)}",
+                        message=json.dumps({"action": "update_count"})
+                    )
+
+                    # Also update other participants' chat stats in case they have shared conversations
+                    for participant_id in other_participants_ids:
+                        await broadcast.publish(
+                            channel=f"chat_stat_{participant_id}",
+                            message=json.dumps({"action": "update_count"})
+                        )
+
+                elif action in ["inquiry", "confirmed"]:
+
+                    number_of_message = 2 if action == "inquiry" else 1
+                    messages, total_messages = await chat_service.get_latest_message(
+                        chat_room=chat_room, number_of_message=number_of_message
+                    )
+                    data = {
+                        "messages": [msg.model_dump() for msg in messages],
+                        "action_type": action,
+                        "is_new_chatroom": total_messages < number_of_message,
+                    }
+
+
+                    for participant_id in other_participants_ids:
+                        await broadcast.publish(
+                            channel=f"user_global_room_{participant_id}",
+                            message=json.dumps(data, default=custom_encoder),
+                        )
+
+                    for participant_id in other_participants_ids:
+                        await broadcast.publish(
+                            channel=f"chat_stat_{participant_id}",
+                            message=json.dumps({"action": "update_count"})
+                        )
+
+                else:
+                    for participant_id in other_participants_ids:
+                        await broadcast.publish(
+                            channel=f"user_global_room_{participant_id}",
+                            message=json.dumps(body),
                         )
 
             except Exception as err:

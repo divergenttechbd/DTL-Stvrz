@@ -203,8 +203,49 @@ class ChatService(BaseService):
             extra_data={"all_message_count": all_message_count},
         )
 
-    async def update_chat_room_message(self, chat_room: ChatRoom, other_user_id: PydanticObjectId) -> None:
-        await self.repository.update_chat_message(chat_room=chat_room, other_user_id=other_user_id)
+    async def mark_messages_as_read(
+        self, chat_room_id: PydanticObjectId, reader_id: PydanticObjectId
+    ) -> None:
+        """
+        Marks all unread messages in a specific chat room as read for a user (the reader).
+        """
+        try:
+            print(f"Marking messages as read - Room: {chat_room_id}, Reader: {reader_id}")
+
+            # Preview which messages are unread
+            unread_messages = await Message.find(
+                Message.chat_room.id == chat_room_id,
+                Message.user.id != reader_id,
+                Message.is_read == False,
+            ).to_list()
+
+            print(f"Found {len(unread_messages)} unread messages to mark as read")
+
+            # ✅ IMPORTANT FIX: use field name string in $set
+            result = await Message.find(
+                Message.chat_room.id == chat_room_id,
+                Message.user.id != reader_id,
+                Message.is_read == False,
+            ).update_many({"$set": {"is_read": True}})
+
+            print(f"Updated {result.modified_count} messages to read status")
+
+            # Update the latest_message snapshot inside ChatRoom
+            chat_room = await ChatRoom.find_one(ChatRoom.id == chat_room_id)
+            if chat_room and hasattr(chat_room, "latest_message") and chat_room.latest_message:
+                await ChatRoom.find_one(ChatRoom.id == chat_room_id).update(
+                    {"$set": {"latest_message.is_read": True}}
+                )
+                print("Updated latest message in chat room to read status")
+
+        except Exception as err:
+            print(f"Error in mark_messages_as_read: {err}")
+            import traceback
+            traceback.print_exc()
+
+    async def mark_messages_as_read_service(self, chat_room_id: PydanticObjectId, reader_user: User) -> None:
+        """Service layer method to mark messages in a room as read."""
+        await self.repository.mark_messages_as_read(chat_room_id=chat_room_id, reader_id=reader_user.id)
         return None
 
     async def save_message(self, data: dict, chat_room: ChatRoom, current_user: User) -> Message:
@@ -272,7 +313,26 @@ class ChatService(BaseService):
         return await self.repository.update_user_last_seen(current_user=current_user, online_status=online_status)
 
     async def get_user_unread_message_count(self, user_id: str, u_type: UserTypeOption) -> int:
-        return await self.repository.count_user_unread_message(user_id=user_id, u_type=u_type)
+        """
+        Retrieves the total number of unread messages for a user.
+        This method ensures that a raw integer count is returned.
+        """
+        try:
+            # The repository method already returns an integer count.
+            print(" =========== MMM ")
+            count = await self.repository.count_user_unread_message(
+                user_id=user_id, u_type=u_type, is_read=False
+            )
+
+            print(count, " ====== - ")
+
+            # The value from .count() is already an integer.
+            return count
+
+        except Exception as e:
+            print(f"Error getting unread message count: {e}")
+            # Return a default value in case of an error.
+            return 0
 
     async def get_by_id(self, id: str) -> User | None:
         return await self.repository.get_by_id(model=User, id=id)

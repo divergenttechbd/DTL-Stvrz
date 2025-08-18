@@ -16,7 +16,7 @@ from src.modules.users.models import User
 from src.core.schemas.common import QueryParam
 from src.core.repository.base_repository import BaseRepository
 from src.modules.chat.models import ChatRoom, Message
-
+from beanie.operators import ElemMatch, Or, In
 
 class ChatRepository(BaseRepository):
 
@@ -171,54 +171,156 @@ class ChatRepository(BaseRepository):
     ) -> int:
         return await Message.find(*filter_param).count()
 
+
+
+    # async def count_user_unread_message(
+    #     self, user_id: str, u_type: UserTypeOption, is_read: bool = False
+    # ) -> int:
+    #     user_obj_id = PydanticObjectId(user_id)
+    #
+    #     # 1. Get all rooms for the user (this query is correct)
+    #     if u_type == UserTypeOption.GUEST:
+    #         filter_expression = (ChatRoom.from_user.id == user_obj_id,)
+    #     else:  # HOST or CO-HOST
+    #         filter_expression = (Or(ChatRoom.to_user.id == user_obj_id, In(ChatRoom.to_user.id, [user_obj_id])),)
+    #
+    #     # We don't need fetch_links=True here, as we will fetch manually
+    #     user_all_chat_room = await ChatRoom.find(*filter_expression).to_list()
+    #
+    #     total_unread_msg_count = 0
+    #     for room in user_all_chat_room:
+    #         other_user_ids = []
+    #
+    #         # 2. Explicitly fetch links before accessing attributes
+    #         from_user = await room.from_user.fetch() if isinstance(room.from_user, Link) else room.from_user
+    #
+    #         if from_user and from_user.id == user_obj_id:
+    #             # Current user is the GUEST. The "others" are the hosts.
+    #             if isinstance(room.to_user, list):
+    #                 for host_link in room.to_user:
+    #                     host = await host_link.fetch() if isinstance(host_link, Link) else host_link
+    #                     if host:
+    #                         other_user_ids.append(host.id)
+    #             elif isinstance(room.to_user, Link):
+    #                 host = await room.to_user.fetch()
+    #                 if host:
+    #                     other_user_ids.append(host.id)
+    #         else:
+    #             # Current user is a HOST/CO-HOST. The "other" is the guest.
+    #             if from_user:
+    #                 other_user_ids.append(from_user.id)
+    #
+    #         if not other_user_ids:
+    #             continue
+    #
+    #         # 3. Count messages from the "other" users
+    #         individual_chat_room_msg_count = await Message.find(
+    #             Message.chat_room.id == room.id,
+    #             In(Message.user.id, other_user_ids),
+    #             Message.is_read == False,
+    #         ).count()
+    #
+    #         if individual_chat_room_msg_count > 0:
+    #             total_unread_msg_count += 1
+    #
+    #     return total_unread_msg_count
+
     async def count_user_unread_message(
         self, user_id: str, u_type: UserTypeOption, is_read: bool = False
     ) -> int:
+        """
+        Correctly and efficiently counts the total number of unread messages for a user
+        across all their chat rooms using a single, efficient query.
+        """
+        print(f"Counting unread messages for user {user_id} of type {u_type}")
         user_obj_id = PydanticObjectId(user_id)
 
-        # 1. Get all rooms for the user (this query is correct)
+        # 1. Define a filter to find all chat rooms the user is a part of.
         if u_type == UserTypeOption.GUEST:
-            filter_expression = (ChatRoom.from_user.id == user_obj_id,)
-        else:  # HOST or CO-HOST
-            filter_expression = (Or(ChatRoom.to_user.id == user_obj_id, In(ChatRoom.to_user.id, [user_obj_id])),)
+            room_filter = (ChatRoom.from_user.id == user_obj_id,)
+        else:  # Handles HOST and CO-HOST
+            # FIXED: Handle both single Link and array of Links for to_user
+            print(ChatRoom.to_user, " to user ", user_obj_id)
+            room_filter = (
+                Or(
+                    # Case: to_user is a single User ref
+                    ChatRoom.to_user.id == user_obj_id,
+                    # Case: to_user is an array of User refs
+                    ElemMatch(ChatRoom.to_user, {"id": user_obj_id})
+                ),
+            )
 
-        # We don't need fetch_links=True here, as we will fetch manually
-        user_all_chat_room = await ChatRoom.find(*filter_expression).to_list()
+        print(f"Room filter: {room_filter}")
 
-        total_unread_msg_count = 0
-        for room in user_all_chat_room:
-            other_user_ids = []
+        # 2. Get a list of only the IDs of those rooms for efficiency.
+        user_all_chat_rooms = await ChatRoom.find(*room_filter).to_list()
+        room_ids = [room.id for room in user_all_chat_rooms]
 
-            # 2. Explicitly fetch links before accessing attributes
-            from_user = await room.from_user.fetch() if isinstance(room.from_user, Link) else room.from_user
+        print(f"User has {len(room_ids)} chat  rooms: {room_ids}")
 
-            if from_user and from_user.id == user_obj_id:
-                # Current user is the GUEST. The "others" are the hosts.
-                if isinstance(room.to_user, list):
-                    for host_link in room.to_user:
-                        host = await host_link.fetch() if isinstance(host_link, Link) else host_link
-                        if host:
-                            other_user_ids.append(host.id)
-                elif isinstance(room.to_user, Link):
-                    host = await room.to_user.fetch()
-                    if host:
-                        other_user_ids.append(host.id)
-            else:
-                # Current user is a HOST/CO-HOST. The "other" is the guest.
-                if from_user:
-                    other_user_ids.append(from_user.id)
+        if not room_ids:
+            print("No chat rooms found for user")
+            return 0
 
-            if not other_user_ids:
-                continue
+        # 3. Count all messages within those rooms where the sender is NOT the current user
+        #    and the message is marked as unread.
 
-            # 3. Count messages from the "other" users
-            individual_chat_room_msg_count = await Message.find(
-                Message.chat_room.id == room.id,
-                In(Message.user.id, other_user_ids),
+        unread_countx = await Message.find(
+            In(Message.chat_room.id, room_ids),
+            Message.user.id != user_obj_id,
+            Message.is_read == False,
+            Message.m_type == "normal"
+        ).to_list()
+
+        print(unread_countx)
+
+        unread_count = await Message.find(
+            In(Message.chat_room.id, room_ids),
+            Message.user.id != user_obj_id,
+            Message.is_read == False,
+            Message.m_type == "normal"
+        ).count()
+
+        print(f"Found {unread_count} unread messages for user {user_id}")
+        return unread_count
+
+    async def mark_messages_as_read(
+        self, chat_room_id: PydanticObjectId, reader_id: PydanticObjectId
+    ) -> None:
+        """
+        Marks all unread messages in a specific chat room as read for a user (the reader).
+        """
+        try:
+            print(f"Marking messages as read - Room: {chat_room_id}, Reader: {reader_id}")
+
+            # Preview which messages are unread
+            unread_messages = await Message.find(
+                Message.chat_room.id == chat_room_id,
+                Message.user.id != reader_id,
                 Message.is_read == False,
-            ).count()
+            ).to_list()
 
-            if individual_chat_room_msg_count > 0:
-                total_unread_msg_count += 1
+            print(f"Found {len(unread_messages)} unread messages to mark as read")
 
-        return total_unread_msg_count
+            # ✅ IMPORTANT FIX: use field name string in $set
+            result = await Message.find(
+                Message.chat_room.id == chat_room_id,
+                Message.user.id != reader_id,
+                Message.is_read == False,
+            ).update_many({"$set": {"is_read": True}})
+
+            print(f"Updated {result.modified_count} messages to read status")
+
+            # Update the latest_message snapshot inside ChatRoom
+            chat_room = await ChatRoom.find_one(ChatRoom.id == chat_room_id)
+            if chat_room and hasattr(chat_room, "latest_message") and chat_room.latest_message:
+                await ChatRoom.find_one(ChatRoom.id == chat_room_id).update(
+                    {"$set": {"latest_message.is_read": True}}
+                )
+                print("Updated latest message in chat room to read status")
+
+        except Exception as err:
+            print(f"Error in mark_messages_as_read: {err}")
+            import traceback
+            traceback.print_exc()
+
