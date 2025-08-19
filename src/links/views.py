@@ -125,6 +125,7 @@ def redirect_link(request, code):
         referer=request.META.get("HTTP_REFERER", "") or request.META.get("HTTP_REFERRER", "")
     )
     Link.objects.filter(pk=link.pk).update(clicks=F('clicks') + 1)
+    # tst
 
     ua = request.META.get("HTTP_USER_AGENT", "")
     browser_info = detect_browser_type(ua)
