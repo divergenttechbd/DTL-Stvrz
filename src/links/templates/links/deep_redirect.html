@@ -12,29 +12,18 @@
     @keyframes fadeInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
     h2 { font-size: 24px; font-weight: 600; margin-bottom: 12px; color: #fff; }
     p { font-size: 16px; color: rgba(255, 255, 255, 0.9); margin-bottom: 24px; }
-    .btn { display: inline-block; background: #fff; color: #FF6A3D; font-weight: 600; font-size: 16px; padding: 12px 28px; border-radius: 14px; text-decoration: none; box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15); transition: all 0.3s ease; border: 1px solid #fff; margin: 8px; cursor: pointer; }
-    .btn:hover { background: #f9f9f9; transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2); }
-    .btn-secondary { background: rgba(255, 255, 255, 0.2); color: #fff; border: 1px solid rgba(255, 255, 255, 0.3); }
-    .btn-secondary:hover { background: rgba(255, 255, 255, 0.3); }
-    .loader { width: 40px; height: 40px; border: 4px solid rgba(255, 255, 255, 0.3); border-top: 4px solid #fff; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 16px; display: none; }
+    #openBtn { display: inline-block; background: #fff; color: #FF6A3D; font-weight: 600; font-size: 16px; padding: 12px 28px; border-radius: 14px; text-decoration: none; box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15); transition: all 0.3s ease; border: 1px solid #fff; }
+    #openBtn:hover { background: #f9f9f9; transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2); }
+    .loader { width: 40px; height: 40px; border: 4px solid rgba(255, 255, 255, 0.3); border-top: 4px solid #fff; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 16px; }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    .buttons { margin-top: 20px; }
-    .status { font-size: 14px; color: rgba(255, 255, 255, 0.8); margin-top: 15px; }
-    .hidden { display: none; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="loader" id="loader"></div>
-    <h2 id="title">Open Stayverz App</h2>
-    <p id="subtitle">Choose how you'd like to open the app</p>
-
-    <div class="buttons" id="buttons">
-      <a id="openAppBtn" class="btn" href="#">Open in App</a>
-      <a id="openWebBtn" class="btn btn-secondary" href="{{ web_fallback }}">Open in Browser</a>
-    </div>
-
-    <div class="status" id="status"></div>
+    <div class="loader"></div>
+    <h2>Opening the Stayverz app…</h2>
+    <p>If the app doesn't open automatically, tap below.</p>
+    <a id="openBtn" href="{{ web_fallback }}">Open in Browser</a>
   </div>
 
 <script>
@@ -49,238 +38,132 @@
   const referralCode = "{{ referral_code|escapejs }}";
 
   let pageHidden = false;
-  let appOpenAttempted = false;
-  let userInteracted = false;
+  let redirectAttempted = false;
 
   // Track page visibility
   document.addEventListener("visibilitychange", () => {
     pageHidden = document.hidden;
   });
-
   window.addEventListener("pagehide", () => {
     pageHidden = true;
   });
 
-  // Track user interaction for browsers that require it
-  document.addEventListener("click", () => {
-    userInteracted = true;
-  });
-
-  function updateStatus(message) {
-    document.getElementById('status').textContent = message;
-  }
-
-  function showLoader() {
-    document.getElementById('loader').style.display = 'block';
-    document.getElementById('title').textContent = 'Opening Stayverz…';
-    document.getElementById('subtitle').textContent = 'Please wait...';
-    document.getElementById('buttons').classList.add('hidden');
-  }
-
-  function hideLoader() {
-    document.getElementById('loader').style.display = 'none';
-    document.getElementById('title').textContent = 'Open Stayverz App';
-    document.getElementById('subtitle').textContent = 'Choose how you\'d like to open the app';
-    document.getElementById('buttons').classList.remove('hidden');
-  }
-
   function buildDeepLinkWithReferral(baseDeepLink, referralCode) {
     if (!baseDeepLink || !referralCode) return baseDeepLink;
+
+    // Add referral code to deep link
     const separator = baseDeepLink.includes('?') ? '&' : '?';
     return `${baseDeepLink}${separator}referral_code=${encodeURIComponent(referralCode)}`;
   }
 
-  function detectBrowser() {
-    const ua = navigator.userAgent.toLowerCase();
-    return {
-      isChrome: ua.includes('chrome') && !ua.includes('edg'),
-      isSafari: ua.includes('safari') && !ua.includes('chrome'),
-      isFirefox: ua.includes('firefox'),
-      isEdge: ua.includes('edg'),
-      isInApp: ua.includes('wv') || ua.includes('fbav') || ua.includes('instagram'),
-      isStandaloneBrowser: !ua.includes('wv') && !ua.includes('fbav') && !ua.includes('instagram')
-    };
+  function attemptOpen() {
+    if (redirectAttempted) return;
+    redirectAttempted = true;
+
+    // Check if this is a retry (has 'dl=1' parameter)
+    const params = new URLSearchParams(window.location.search);
+    const isRetry = params.has('dl');
+
+    if (!isRetry) {
+      // First attempt: Try universal link/app link
+      console.log('Attempting universal link:', universal);
+      window.location = universal;
+
+      // Short timeout to see if universal link worked
+      setTimeout(() => {
+        if (pageHidden) return; // Universal link worked
+        fallbackStrategy();
+      }, 1000);
+    } else {
+      // This is already a fallback, go straight to backup strategies
+      fallbackStrategy();
+    }
   }
 
-  function attemptAppOpen() {
-    if (appOpenAttempted) return;
-    appOpenAttempted = true;
-
-    const browser = detectBrowser();
-    updateStatus('Attempting to open app...');
-
-    // Store referral code
-    if (referralCode && typeof(Storage) !== "undefined") {
-      try {
-        localStorage.setItem('stayverz_referral_code', referralCode);
-      } catch (e) {
-        console.log('Could not store referral code:', e);
-      }
-    }
+  function fallbackStrategy() {
+    if (pageHidden) return;
 
     if (isAndroid) {
-      handleAndroidAppOpen(browser);
-    } else if (isIOS) {
-      handleIOSAppOpen(browser);
-    } else {
-      // Desktop - just go to web fallback
-      window.location.href = webFallback;
-    }
-  }
-
-  function handleAndroidAppOpen(browser) {
-    const deepLinkWithReferral = buildDeepLinkWithReferral(deep, referralCode);
-
-    if (browser.isStandaloneBrowser) {
-      // For standalone browsers, use intent URL immediately
+      // Android: Try intent URL with referral code
       const fallbackUrl = encodeURIComponent(webFallback);
       const scheme = deep.split(':')[0] || 'stayverz';
-      const hostPath = deepLinkWithReferral ?
-        deepLinkWithReferral.replace(/^.*?:\/\/([^#]*).*/, '$1') :
-        deep.replace(/^.*?:\/\/([^#]*).*/, '$1');
+      const hostPath = deep.replace(/^.*?:\/\/([^#]*).*/, '$1');
 
-      const intentUrl = `intent://${hostPath}#Intent;package=com.stayverz.stayverz;scheme=${scheme};S.browser_fallback_url=${fallbackUrl};end`;
+      // Build deep link with referral code
+      const deepLinkWithReferral = buildDeepLinkWithReferral(deep, referralCode);
+      const updatedHostPath = deepLinkWithReferral ? deepLinkWithReferral.replace(/^.*?:\/\/([^#]*).*/, '$1') : hostPath;
 
-      console.log('Using intent URL for browser:', intentUrl);
-      window.location.href = intentUrl;
+      const intentUrl = `intent://${updatedHostPath}#Intent;package=com.stayverz.stayverz;scheme=${scheme};S.browser_fallback_url=${fallbackUrl};end`;
 
-      // Fallback to Play Store if intent fails
+      console.log('Attempting intent URL with referral:', intentUrl);
+      window.location.replace(intentUrl);
+
+      // If intent fails, go to Play Store after delay
       setTimeout(() => {
         if (!pageHidden) {
-          console.log('Intent failed, going to Play Store');
-          window.location.href = androidStore;
+          console.log('Redirecting to Android store:', androidStore);
+          window.location.replace(androidStore || webFallback);
         }
-      }, 2000);
-    } else {
-      // For in-app browsers, try custom scheme first
-      if (deepLinkWithReferral) {
-        window.location.href = deepLinkWithReferral;
+      }, 1500);
 
-        setTimeout(() => {
-          if (!pageHidden) {
-            window.location.href = androidStore;
-          }
-        }, 1500);
-      } else {
-        window.location.href = androidStore;
-      }
-    }
-  }
+    } else if (isIOS) {
+      // iOS: Try custom URL scheme with referral code
+      if (deep) {
+        const deepLinkWithReferral = buildDeepLinkWithReferral(deep, referralCode);
+        console.log('Attempting iOS deep link with referral:', deepLinkWithReferral);
 
-  function handleIOSAppOpen(browser) {
-    const deepLinkWithReferral = buildDeepLinkWithReferral(deep, referralCode);
-
-    if (browser.isStandaloneBrowser) {
-      // For Safari and other browsers, try universal link first
-      if (universal) {
-        console.log('Trying universal link:', universal);
-        window.location.href = universal;
-
-        // If universal link fails, fall back to custom scheme
-        setTimeout(() => {
-          if (!pageHidden && deepLinkWithReferral) {
-            console.log('Universal failed, trying custom scheme');
-            window.location.href = deepLinkWithReferral;
-          }
-        }, 1000);
-
-        // Final fallback to App Store
-        setTimeout(() => {
-          if (!pageHidden) {
-            console.log('All failed, going to App Store');
-            window.location.href = iosStore;
-          }
-        }, 2500);
-      } else if (deepLinkWithReferral) {
-        // No universal link, try custom scheme
-        window.location.href = deepLinkWithReferral;
-
-        setTimeout(() => {
-          if (!pageHidden) {
-            window.location.href = iosStore;
-          }
-        }, 1500);
-      } else {
-        // No deep link at all, go to store
-        window.location.href = iosStore;
-      }
-    } else {
-      // For in-app browsers, use iframe method
-      if (deepLinkWithReferral) {
+        // Create hidden iframe for iOS deep link attempt
         const iframe = document.createElement('iframe');
         iframe.style.display = 'none';
-        iframe.src = deepLinkWithReferral;
+        iframe.src = deepLinkWithReferral || deep;
         document.body.appendChild(iframe);
 
         setTimeout(() => {
           document.body.removeChild(iframe);
           if (!pageHidden) {
-            window.location.href = iosStore;
+            console.log('Redirecting to iOS store:', iosStore);
+            window.location.replace(iosStore || webFallback);
           }
         }, 1500);
       } else {
-        window.location.href = iosStore;
+        window.location.replace(iosStore || webFallback);
       }
+    } else {
+      // Desktop or unknown - go to web fallback
+      window.location.replace(webFallback);
     }
   }
 
-  // Check if this is an automatic attempt vs manual
-  const params = new URLSearchParams(window.location.search);
-  const isManualOpen = params.has('manual');
-  const browser = detectBrowser();
+  // Store referral code in localStorage for app to pick up later
+  if (referralCode && typeof(Storage) !== "undefined") {
+    try {
+      localStorage.setItem('stayverz_referral_code', referralCode);
+      console.log('Stored referral code:', referralCode);
+    } catch (e) {
+      console.log('Could not store referral code:', e);
+    }
+  }
 
-  // Setup button handlers
-  document.getElementById('openAppBtn').addEventListener('click', function(e) {
-    e.preventDefault();
-    showLoader();
-    setTimeout(() => {
-      attemptAppOpen();
+  // Start the process after a brief delay
+  setTimeout(attemptOpen, 100);
 
-      // Hide loader after attempt
-      setTimeout(() => {
-        if (!pageHidden) {
-          hideLoader();
-          updateStatus('App didn\'t open? Try the browser version below.');
-        }
-      }, 3000);
-    }, 500);
+  // Backup timeout - if nothing happened after 3 seconds, force fallback
+  setTimeout(() => {
+    if (!pageHidden && !redirectAttempted) {
+      console.log('Forcing fallback after timeout');
+      window.location.replace(webFallback);
+    }
+  }, 3000);
+
+  // Update the manual open button to include referral tracking
+  document.getElementById('openBtn').addEventListener('click', function(e) {
+    if (referralCode) {
+      // Add referral code to the fallback URL if needed
+      const separator = webFallback.includes('?') ? '&' : '?';
+      const urlWithReferral = `${webFallback}${separator}referral_code=${encodeURIComponent(referralCode)}`;
+      this.href = urlWithReferral;
+    }
   });
-
-  // Update web fallback button with referral
-  if (referralCode) {
-    const webBtn = document.getElementById('openWebBtn');
-    const separator = webFallback.includes('?') ? '&' : '?';
-    webBtn.href = `${webFallback}${separator}referral_code=${encodeURIComponent(referralCode)}`;
-  }
-
-  // Auto-attempt only for in-app browsers or when coming from another app
-  if (!isManualOpen && (browser.isInApp || document.referrer.includes('whatsapp'))) {
-    // Auto-attempt for in-app browsers (WhatsApp, etc.)
-    setTimeout(() => {
-      showLoader();
-      attemptAppOpen();
-
-      // Show manual options if auto-attempt fails
-      setTimeout(() => {
-        if (!pageHidden) {
-          hideLoader();
-          updateStatus('App didn\'t open automatically. Please try manually above.');
-        }
-      }, 4000);
-    }, 500);
-  } else {
-    // For standalone browsers, show manual options immediately
-    updateStatus(browser.isStandaloneBrowser ?
-      'For security, browsers require manual interaction to open apps.' :
-      'Tap the button above to open the Stayverz app.');
-  }
-
-  // Enhanced debugging
-  console.log('Browser detection:', browser);
-  console.log('Deep link:', deep);
-  console.log('Universal link:', universal);
-  console.log('Referral code:', referralCode);
-  console.log('Is manual open:', isManualOpen);
 })();
 </script>
 </body>
