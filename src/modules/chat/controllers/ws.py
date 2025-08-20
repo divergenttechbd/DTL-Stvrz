@@ -672,7 +672,7 @@ async def chatroom_ws_receiver(
                         # is_mobile_user = await Cache.get(key=f":1:user_mobile_logged_in_{other_user.username}")
                         if other_user.fcm_token:
                             fcm_title = "New Message"
-                            fcm_body = "You've got a new message"
+                            fcm_body = message_content
                             fcm_data = {
                                 "url": (
                                     f"/host-dashboard/inbox?conversation_id={str(chat_room.id)}"
