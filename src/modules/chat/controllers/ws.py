@@ -670,7 +670,7 @@ async def chatroom_ws_receiver(
                         if not other_user: continue
 
                         # is_mobile_user = await Cache.get(key=f":1:user_mobile_logged_in_{other_user.username}")
-                        if other_user.fcm_token:
+                        if other_user.fcm_token and not other_user.online_status:
                             fcm_title = "New Message"
                             fcm_body = message_content
                             fcm_data = {
