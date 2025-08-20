@@ -680,7 +680,7 @@ async def chatroom_ws_receiver(
                                     else f"/messages?conversation_id={str(chat_room.id)}"
                                 )
                             }
-                            send_fcm_notification(other_user.fcm_token, fcm_title, fcm_body, fcm_data)
+                            # send_fcm_notification(other_user.fcm_token, fcm_title, fcm_body, fcm_data)
 
 
                 elif body.get("action") == "is_read":
