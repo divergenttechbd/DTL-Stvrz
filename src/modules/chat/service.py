@@ -105,13 +105,32 @@ class ChatService(BaseService):
         # Properly resolve Links before creating ChatRoomResponse
         try:
             resolved_from_user = await self._resolve_user_links(chat_room.from_user)
-            resolved_to_user = await self._resolve_user_links(chat_room.to_user)
+
+            resolved_to_users_list = []
+            if isinstance(chat_room.to_user, list):
+
+                resolved_to_users_list = [await self._resolve_user_links(u) for u in chat_room.to_user]
+            elif chat_room.to_user:
+
+                resolved_user = await self._resolve_user_links(chat_room.to_user)
+                if resolved_user:
+                    resolved_to_users_list.append(resolved_user)
+
+
+            final_to_user_data = None
+            if len(resolved_to_users_list) > 1:
+
+                final_to_user_data = resolved_to_users_list
+            elif len(resolved_to_users_list) == 1:
+
+                final_to_user_data = resolved_to_users_list[0]
+            # resolved_to_user = await self._resolve_user_links(chat_room.to_user)
 
             chat_room_data = {
                 "id": chat_room.id,
                 "name": chat_room.name,
                 "from_user": resolved_from_user,
-                "to_user": resolved_to_user,
+                "to_user": final_to_user_data,
                 "status": chat_room.status,
                 "latest_message": chat_room.latest_message,
                 "booking_data": chat_room.booking_data,
@@ -164,15 +183,31 @@ class ChatService(BaseService):
         serialized_chat_rooms = []
         for room in chat_rooms:
             try:
-                # Resolve Links
+
                 resolved_from_user = await self._resolve_user_links(room.from_user)
-                resolved_to_user = await self._resolve_user_links(room.to_user)
+
+                resolved_to_users_list = []
+                if isinstance(room.to_user, list):
+
+                    resolved_to_users_list = [await self._resolve_user_links(u) for u in room.to_user]
+                elif room.to_user:
+
+                    resolved_user = await self._resolve_user_links(room.to_user)
+                    if resolved_user:
+                        resolved_to_users_list.append(resolved_user)
+
+
+                final_to_user_data = None
+                if len(resolved_to_users_list) > 1:
+                    final_to_user_data = resolved_to_users_list
+                elif len(resolved_to_users_list) == 1:
+                    final_to_user_data = resolved_to_users_list[0]
 
                 room_data = {
                     "id": room.id,
                     "name": room.name,
                     "from_user": resolved_from_user,
-                    "to_user": resolved_to_user,
+                    "to_user": final_to_user_data,
                     "status": room.status,
                     "latest_message": room.latest_message,
                     "booking_data": room.booking_data,
