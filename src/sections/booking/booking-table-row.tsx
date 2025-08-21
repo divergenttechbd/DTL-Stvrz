@@ -122,47 +122,53 @@ export default function BookingTableRow({
       <TableCell sx={{ whiteSpace: 'nowrap' }}>
         {reviews.length > 0 ? (
           <Box>
-            {reviews.map((r) => (
-              <div key={r.id}>
-                {r.is_guest_review ?
-                  <Box>
+            {reviews.some((r) => r.is_guest_review) ? ( // Check if there is any guest review
+              reviews.map((r) =>
+                r.is_guest_review ? (
+                  <Box key={r.id}>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <div>
                         <strong>Rating:</strong> {r.rating}
                       </div>
                       <Iconify icon="eva:star-fill" sx={{ color: 'warning.main' }} />
                     </Box>
-                    <div><strong>Review:</strong> {r?.review}</div>
+                    <div><strong>Review:</strong> {r.review}</div>
                   </Box>
-                  : <strong>No Review</strong>
-                }
-              </div>
-            ))}
+                ) : null // Skip non-guest reviews
+              )
+            ) : (
+              <strong>No Review</strong> // If there are reviews but none are guest reviews
+            )}
           </Box>
-        ) : <strong>No Review</strong>}
+        ) : (
+          <strong>No Review</strong> // If there are no reviews at all
+        )}
 
       </TableCell>
       <TableCell sx={{ whiteSpace: 'nowrap' }}>
         {reviews.length > 0 ? (
           <Box>
-            {reviews.map((r) => (
-              <div key={r.id}>
-                {r.is_host_review ?
-                  <Box>
+            {reviews.some((r) => r.is_host_review) ? ( // Only render host reviews if any exist
+              reviews.map((r) =>
+                r.is_host_review ? (
+                  <Box key={r.id}>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <div>
                         <strong>Rating:</strong> {r.rating}
                       </div>
                       <Iconify icon="eva:star-fill" sx={{ color: 'warning.main' }} />
                     </Box>
-                    <div><strong>Type:</strong> {r?.review}</div>
+                    <div><strong>Type:</strong> {r.review}</div>
                   </Box>
-                  : <strong>No Review</strong>
-                }
-              </div>
-            ))}
+                ) : null // Skip non-host reviews
+              )
+            ) : (
+              <strong>No Review</strong> // If reviews exist but none are host reviews
+            )}
           </Box>
-        ) : <strong>No Review</strong>}
+        ) : (
+          <strong>No Review</strong> // If no reviews exist at all
+        )}
 
       </TableCell>
       <TableCell sx={{ px: 1, whiteSpace: 'nowrap', display: 'flex', justifyContent: 'flex-center' }}>

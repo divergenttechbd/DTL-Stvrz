@@ -250,9 +250,9 @@ export default function TourListView({ fromUserDetails, userId }: ListingsListVi
 
       const worksheet = XLSX.utils.json_to_sheet(dataForExport);
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Booking List Report');
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'List Report');
       const today = new Date().toISOString().split('T')[0];
-      XLSX.writeFile(workbook, `booking_list_report_${today}.xlsx`);
+      XLSX.writeFile(workbook, `list_report_${today}.xlsx`);
     } catch(err) {
       console.log(err);
     }

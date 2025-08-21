@@ -209,20 +209,30 @@ export default function BookingListView({
         emptyData.onTrue()
         return;
       }
+
       const responseData = res?.data
-      const dataForExport = responseData?.map((entry: any) => ({
-        'Guest Name': entry?.guest?.full_name,
-        'Guest Phone Number': entry?.guest?.phone_number,
-        'Host Name': entry?.host?.full_name,
-        'Host Phone Number': entry?.host?.phone_number,
-        'Check-In': entry?.check_in,
-        'Check-Out': entry?.check_out,
-        'Booking Date & Time': entry?.created_at,
-        Listing: entry?.listing?.title,
-        'Confirmation Code': entry?.reservation_code,
-        'Guest Paid': entry?.paid_amount,
-        'Review Details': entry?.reviews[0]?.rating,
-      }));
+      const dataForExport = responseData?.map((entry: any) => {
+
+        const guestReview = entry?.reviews?.find((r: any) => r?.is_guest_review);
+        const hostReview = entry?.reviews?.find((r: any) => r?.is_host_review);
+
+        return {
+          'Guest Name': entry?.guest?.full_name,
+          'Guest Phone Number': entry?.guest?.phone_number,
+          'Host Name': entry?.host?.full_name,
+          'Host Phone Number': entry?.host?.phone_number,
+          'Check-In': entry?.check_in,
+          'Check-Out': entry?.check_out,
+          'Booking Date & Time': entry?.created_at,
+          Listing: entry?.listing?.title,
+          'Confirmation Code': entry?.reservation_code,
+          'Guest Paid': entry?.paid_amount,
+          'Guest Rating': guestReview?.rating ?? 'No Rating',
+          'Guest Review': guestReview?.review ?? 'No Review',
+          'Host Rating': hostReview?.rating ?? 'No Rating',
+          'Host Review': hostReview?.review ?? 'No Review',
+        };
+      });
 
       const worksheet = XLSX.utils.json_to_sheet(dataForExport);
       const workbook = XLSX.utils.book_new();
