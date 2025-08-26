@@ -171,8 +171,8 @@ def assetlinks_json(request):
             "namespace": "android_app",
             "package_name": "com.stayverz.stayverz",
             "sha256_cert_fingerprints": [
-                "62:1C:FE:25:00:52:FA:AB:23:E4:BD:7E:59:F3:8C:4D:9C:B0:D1:69:E1:B6:6D:96:B0:19:45:F6:82:73:D6:90",
-                "EF:32:C8:91:E9:91:76:56:44:8F:49:93:C1:50:30:01:BF:F5:AC:CC:EB:A8:83:B0:D1:B0:42:F0:61:9F:F9:4D"
+                "1F:23:BF:4B:5E:CF:78:9F:9F:B7:E9:02:F8:B6:B1:A1:49:E1:EE:F4:A6:5B:54:E3:41:C7:FE:BC:B6:3F:35:F5",
+                "62:1C:FE:25:00:52:FA:AB:23:E4:BD:7E:59:F3:8C:4D:9C:B0:D1:69:E1:B6:6D:96:B0:19:45:F6:82:73:D6:90"
             ]
         }
     }]

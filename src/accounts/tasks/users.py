@@ -19,37 +19,37 @@ from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
 
 
-# @shared_task(name="myproject.users.send_sms")
-# def send_sms(username: str, message: str) -> None:
-#     data = {
-#         "api_token": settings.SSL_TOKEN,
-#         "sid": settings.SSL_SID,
-#         "csms_id": uuid.uuid1().hex[:20],
-#         "sms": message,
-#         "msisdn": username,
-#     }
-#     res = requests.post(settings.SSL_URL, data=data)
-#     print(res.json())
-#     return
-
+@shared_task(name="myproject.users.send_sms")
 def send_sms(username: str, message: str) -> None:
-    # Construct the SMS URL using the provided msisdn and message
-    sms_url = f"http://192.168.7.180:8080/bulk_sms_bd/sms_send_2?msisdn={username}&message={message}"
+    data = {
+        "api_token": settings.SSL_TOKEN,
+        "sid": settings.SSL_SID,
+        "csms_id": uuid.uuid1().hex[:20],
+        "sms": message,
+        "msisdn": username,
+    }
+    res = requests.post(settings.SSL_URL, data=data)
+    print(res.json())
+    return
 
-    # Send the request to the Bulk SMS URL
-    try:
-        res = requests.get(sms_url, timeout=5)  # Add timeout to avoid hanging forever
-
-        print(message)
-
-        if res.status_code == 200:
-            print("SMS sent successfully.")
-        else:
-            print(f"Failed to send SMS. Status Code: {res.status_code}")
-
-    except RequestException as e:
-        # Handle any request-related exception (e.g., ConnectionError, Timeout, etc.)
-        print(f"Error sending SMS: {e}")
+# def send_sms(username: str, message: str) -> None:
+#     # Construct the SMS URL using the provided msisdn and message
+#     sms_url = f"http://192.168.7.180:8080/bulk_sms_bd/sms_send_2?msisdn={username}&message={message}"
+#
+#     # Send the request to the Bulk SMS URL
+#     try:
+#         res = requests.get(sms_url, timeout=5)  # Add timeout to avoid hanging forever
+#
+#         print(message)
+#
+#         if res.status_code == 200:
+#             print("SMS sent successfully.")
+#         else:
+#             print(f"Failed to send SMS. Status Code: {res.status_code}")
+#
+#     except RequestException as e:
+#         # Handle any request-related exception (e.g., ConnectionError, Timeout, etc.)
+#         print(f"Error sending SMS: {e}")
 
 
 
