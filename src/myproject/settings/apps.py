@@ -44,6 +44,7 @@ if DEBUG:
     INSTALLED_APPS += ["django_extensions", "debug_toolbar", "drf_yasg"]
 
 
+
 DEFAULT_MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -55,7 +56,7 @@ DEFAULT_MIDDLEWARE = [
 ]
 
 ON_TOP_MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",
+    # "corsheaders.middleware.CorsMiddleware",
 ]
 
 THIRD_PARTY_MIDDLEWARE = []
