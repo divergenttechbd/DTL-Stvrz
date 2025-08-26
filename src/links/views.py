@@ -153,14 +153,30 @@ def referral_code_json(request, code):
 # .well-known endpoints
 def apple_app_site_association(request):
     data = {
-        "applinks": {
-            "apps": [],
-            "details": [{
-                "appID": os.getenv("IOS_APPID", "6748875178"),
-                "paths": ["/r/*"]
-            }]
-        }
-    }
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": [
+          "BQ3RG3G782.com.stayverz.bd"
+        ],
+        "paths": [
+          "/r/*"
+        ],
+        "components": [
+          {
+            "/": "/*"
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "BQ3RG3G782.com.stayverz.bd"
+    ]
+  }
+}
     return JsonResponse(data, safe=False)
 
 
