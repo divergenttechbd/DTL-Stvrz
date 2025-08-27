@@ -64,7 +64,7 @@ urlpatterns = [
     # path('.well-known/assetlinks.json', assetlinks_view, name='assetlinks'),
     path("", health_check),
     path("api/", include([path("v1/", include(v1_patterns))])),
-    path("admin/", admin.site.urls),
+    # path("admin/", admin.site.urls),
 
     path('r/<slug:code>/', views.redirect_link, name='redirect_link'),
     path('referral-code/<slug:code>/', views.referral_code_json, name='codex'),

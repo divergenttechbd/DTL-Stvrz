@@ -48,6 +48,7 @@ CORS_ALLOWED_ORIGINS = [
     "https://stayverz.com",
     "https://admin.stayverz.com",
     "http://192.168.0.108:3000",
+    "https://new.stayverz.com",
 ]
 CORS_ALLOW_HEADERS = list(default_headers) + ["Set-Cookie"]
 # CORS_ORIGIN_ALLOW_HEADER = [

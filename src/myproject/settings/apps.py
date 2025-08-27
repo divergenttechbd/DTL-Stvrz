@@ -56,7 +56,7 @@ DEFAULT_MIDDLEWARE = [
 ]
 
 ON_TOP_MIDDLEWARE = [
-    # "corsheaders.middleware.CorsMiddleware",
+     "corsheaders.middleware.CorsMiddleware",
 ]
 
 THIRD_PARTY_MIDDLEWARE = []
