@@ -35,7 +35,8 @@ if not DEBUG:
     REST_FRAMEWORK["EXCEPTION_HANDLER"] = "base.exceptions.custom_exception_handler"
 
 
-# CORS_ORIGIN_ALLOW_ALL = True
+CORS_ALLOW_ALL_ORIGINS = True
+# FCORS_ORIGIN_ALLOW_ALL = True
 CORS_ALLOWED_ORIGINS = [
     "https://dev.stayverz.com",
     "https://dev-admin.stayverz.com",

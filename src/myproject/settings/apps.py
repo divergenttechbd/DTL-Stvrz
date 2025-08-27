@@ -55,6 +55,19 @@ DEFAULT_MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://dev.stayverz.com",
+    "https://dev-admin.stayverz.com",
+    "https://local.stayverz.com",
+    "https://dev.bdbnb.com",
+    "https://dev-admin.bdbnb.com",
+    "https://redesign.stayverz.com",
+    "https://www.stayverz.com",
+    "https://stayverz.com",
+    "https://admin.stayverz.com",
+    "https://new.stayverz.com",
+]
+
 ON_TOP_MIDDLEWARE = [
      "corsheaders.middleware.CorsMiddleware",
 ]
