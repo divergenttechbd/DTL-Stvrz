@@ -10,7 +10,7 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ("base.apis.renderers.DefaultRenderer",),
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework.authentication.TokenAuthentication",
-        "rest_framework.authentication.SessionAuthentication",
+        # "rest_framework.authentication.SessionAuthentication",
     ),
     "DEFAULT_PAGINATION_CLASS": "base.helpers.CustomPagination",
     "PAGE_SIZE": 10,
