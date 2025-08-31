@@ -15,11 +15,12 @@ def send_email(to_email: str, subject: str, text: str) -> None:
         html_content=text,
     )
     try:
-        sg = SendGridAPIClient(settings.EMAIL_HOST_PASSWORD)
-        response = sg.send(message)
-        print(response.status_code)
-        print(response.body)
-        print(response.headers)
+        return None
+        # sg = SendGridAPIClient(settings.EMAIL_HOST_PASSWORD)
+        # response = sg.send(message)
+        # print(response.status_code)
+        # print(response.body)
+        # print(response.headers)
     except HTTPError as e:
         print(e.to_dict)
 
@@ -28,9 +29,9 @@ def send_email_using_default_django_backend(
     to_email: str, subject: str, text_content: str
 ) -> None:
     try:
-        email = EmailMultiAlternatives(subject, text_content,settings.FROM_EMAIL , [to_email])
-        email.attach_alternative(text_content, "text/html")
-        email.send()
+        # email = EmailMultiAlternatives(subject, text_content,settings.FROM_EMAIL , [to_email])
+        # email.attach_alternative(text_content, "text/html")
+        # email.send()
         print("-- send --- email. ")
         return None
     except HTTPError as e:

@@ -1,7 +1,7 @@
 import random
 from accounts.tasks.users import send_sms
 from base.cache.redis_cache import delete_cache, get_cache, set_cache
-from base.helpers.email import send_email_using_default_django_backend
+from base.helpers.email import send_email_using_default_django_backend, send_email
 from base.helpers.constants import OtpScopeOption
 from django.template.loader import get_template
 

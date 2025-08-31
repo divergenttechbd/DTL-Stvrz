@@ -246,22 +246,23 @@ def send_invoice_email(booking: Booking, pdf_content: bytes):
 
     from_email = settings.DEFAULT_FROM_EMAIL
 
-    # Email to Guest
-    if booking.guest.email:
-        email_guest = EmailMessage(subject, body, from_email, [booking.guest.email])
-        email_guest.attach(f'Invoice_{booking.invoice_no}.pdf', pdf_content, 'application/pdf')
-        try:
-            email_guest.send(fail_silently=False)
-            print(f"Invoice email sent to guest: {booking.guest.email}")
-        except Exception as e:
-            print(f"Error sending invoice email to guest {booking.guest.email}: {e}")
 
-    # Email to Host
-    if booking.host.email:
-        email_host = EmailMessage(subject, body, from_email, [booking.host.email])
-        email_host.attach(f'Invoice_{booking.invoice_no}.pdf', pdf_content, 'application/pdf')
-        try:
-            email_host.send(fail_silently=False)
-            print(f"Invoice email sent to host: {booking.host.email}")
-        except Exception as e:
-            print(f"Error sending invoice email to host {booking.host.email}: {e}")
+    # Email to Guest
+    # if booking.guest.email:
+    #     email_guest = EmailMessage(subject, body, from_email, [booking.guest.email])
+    #     email_guest.attach(f'Invoice_{booking.invoice_no}.pdf', pdf_content, 'application/pdf')
+    #     try:
+    #         email_guest.send(fail_silently=False)
+    #         print(f"Invoice email sent to guest: {booking.guest.email}")
+    #     except Exception as e:
+    #         print(f"Error sending invoice email to guest {booking.guest.email}: {e}")
+    #
+    # # Email to Host
+    # if booking.host.email:
+    #     email_host = EmailMessage(subject, body, from_email, [booking.host.email])
+    #     email_host.attach(f'Invoice_{booking.invoice_no}.pdf', pdf_content, 'application/pdf')
+    #     try:
+    #         email_host.send(fail_silently=False)
+    #         print(f"Invoice email sent to host: {booking.host.email}")
+    #     except Exception as e:
+    #         print(f"Error sending invoice email to host {booking.host.email}: {e}")
