@@ -31,6 +31,7 @@ def send_email_using_default_django_backend(
         email = EmailMultiAlternatives(subject, text_content,settings.FROM_EMAIL , [to_email])
         email.attach_alternative(text_content, "text/html")
         email.send()
+        print("-- send --- email. ")
         return None
     except HTTPError as e:
         print(e.to_dict)
