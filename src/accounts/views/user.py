@@ -22,6 +22,7 @@ from accounts.serializers import (
     UserIdentityVerificationSerializer,
     UserProfileSerializer, UserLiveVerificationSerializer,
     SuperhostStatusHistorySerializer, HostPublicProfileSerializer, HostCohostingAvailabilitySerializer,
+    UserDeleteSerializer,
 )
 from accounts.services import get_superhost_progress
 from base.cache.redis_cache import delete_cache, set_cache
@@ -882,3 +883,49 @@ class ListHostsInRadiusAPIView(ListAPIView):
         # Similar issue with getting distance into serializer here
         serializer = self.get_serializer(sorted_hosts_in_radius, many=True)
         return Response(serializer.data)
+
+# delete --------------------------
+
+class UserDeleteAPIView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, *args, **kwargs):
+        user = self.request.user
+
+        serializer = UserDeleteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        if not user.check_password(serializer.validated_data['password']):
+            return Response({"message": "Incorrect password."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            phone_number, _ = user.username.split('_', 1)
+        except ValueError:
+            return Response(
+                {"message": "Invalid user format."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        with transaction.atomic():
+            try:
+                guest_user = User.objects.select_for_update().get(username=f"{phone_number}_guest")
+                guest_user.is_deleted = True
+                # guest_user.is_active = False
+                guest_user.save()
+            except User.DoesNotExist:
+                pass
+
+            print(guest_user, " ====== ")
+            try:
+                host_user = User.objects.select_for_update().get(username=f"{phone_number}_host")
+                host_user.is_deleted = True
+                # host_user.is_active = False
+                host_user.save()
+            except User.DoesNotExist:
+                pass
+
+            print(host_user, " --------")
+
+        return Response({"message": "Account deleted successfully."}, status=status.HTTP_200_OK)

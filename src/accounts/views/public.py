@@ -340,7 +340,16 @@ class PublicUserLoginAPIView(views.APIView):
             user = User.objects.get(**filter_params)
         except User.DoesNotExist:
             return Response(
-                {"message": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST
+                {"message": "Account not found"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        print(" ====== ")
+        print(" --- ", user.is_deleted)
+
+        if user.is_deleted:
+            return Response(
+                {"message": "This account has been deleted."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not user.is_active:
@@ -458,7 +467,14 @@ class PublicUserLoginDualAPIView(views.APIView):
             user = User.objects.get(**filter_params)
         except User.DoesNotExist:
             return Response(
-                {"message": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST
+                {"message": "Account not found"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+        if user.is_deleted:
+            return Response(
+                {"message": "This account has been deleted."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not user.is_active:
@@ -466,6 +482,8 @@ class PublicUserLoginDualAPIView(views.APIView):
                 {"message": f"Your account is {user.status}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
 
 
         raw_password = request.data["password"]

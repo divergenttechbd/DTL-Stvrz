@@ -7,7 +7,7 @@ from accounts.views.user import (
     UserUnreadMessageCountAPIView,
     logout,
     mobile_login, UserSelfieVerificationAPIView, SuperhostProgressAPIView, ListHostsInRadiusAPIView,
-    HostCohostingAvailabilityUpdateAPIView, UserPasswordChangeMobile,
+    HostCohostingAvailabilityUpdateAPIView, UserPasswordChangeMobile, UserDeleteAPIView,
 )
 from django.urls import path
 
@@ -56,4 +56,6 @@ urlpatterns = [
     ),
     path('superhost-progress/<int:host_id>/', SuperhostProgressAPIView.as_view(), name='superhost_progress'),
     path('public/hosts-in-radius/', ListHostsInRadiusAPIView.as_view(), name='public_hosts_in_radius'),
+
+    path('delete/', UserDeleteAPIView.as_view(), name='user-delete'),
 ]

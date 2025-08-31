@@ -303,3 +303,12 @@ class HostPublicProfileSerializer(serializers.ModelSerializer):
             return obj.calculated_distance_km.quantize(Decimal('0.1'))
 
         return None
+
+
+class UserDeleteSerializer(serializers.Serializer):
+
+    password = serializers.CharField(
+        style={'input_type': 'password'},
+        trim_whitespace=False,
+        write_only=True
+    )

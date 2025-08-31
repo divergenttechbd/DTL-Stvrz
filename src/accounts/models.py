@@ -82,6 +82,8 @@ class User(AbstractUser, BaseModel):
         help_text="Total Taka earned by this HOST from all referral activities (as referrer or referred bonus)"
     )
 
+    is_deleted = models.BooleanField(default=False)
+
     # avg_rating,
 
     class Meta:
