@@ -13,7 +13,7 @@ def generate_access_token(user: User) -> str:
         "u_type": user.u_type,
         "phone_number": user.phone_number,
         "is_active": user.is_active,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=7),
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(weeks=4),
         "token_type": "access",
     }
     raw_token = jwt.encode(
@@ -28,7 +28,7 @@ def generate_access_token(user: User) -> str:
 def generate_refresh_token(user: User) -> str:
     token_data = {
         "username": user.username,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(weeks=2),
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(weeks=8),
         "token_type": "refresh",
     }
     raw_token = jwt.encode(
