@@ -13,7 +13,7 @@ def generate_access_token(user: User) -> str:
         "u_type": user.u_type,
         "phone_number": user.phone_number,
         "is_active": user.is_active,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(weeks=4),
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=19),
         "token_type": "access",
     }
     raw_token = jwt.encode(
@@ -28,7 +28,7 @@ def generate_access_token(user: User) -> str:
 def generate_refresh_token(user: User) -> str:
     token_data = {
         "username": user.username,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(weeks=8),
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=21),
         "token_type": "refresh",
     }
     raw_token = jwt.encode(
@@ -48,7 +48,7 @@ def generate_cookie_data(access_token: str) -> dict:
     return {
         "key": "cookie_token",
         "value": access_token,
-        "expires": datetime.datetime.utcnow() + datetime.timedelta(weeks=4),
+        "expires": datetime.datetime.utcnow() + datetime.timedelta(days=19),
         "secure": True,
         "httponly": True,
         "samesite": "None",
