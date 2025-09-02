@@ -154,26 +154,26 @@ class AdminListingRetrieveUpdateAPIView(RetrieveUpdateAPIView):
         kwargs["related_fields"] = related_fields
         return self.serializer_class(*args, **kwargs)
 
-    # def patch(self, request, *args, **kwargs):
-    #     instance = self.get_object()
-    #     serializer = ListingStatusUpdateSerializer(data=request.data)
-    #     if serializer.is_valid(raise_exception=True):
-    #         listing_status = serializer.validated_data.get(
-    #             "listing_status", instance.status
-    #         )
-    #         verification_status = serializer.validated_data.get(
-    #             "verification_status", instance.verification_status
-    #         )
-    #
-    #         instance.status = listing_status
-    #         instance.verification_status = verification_status
-    #
-    #         instance.verification_status
-    #
-    #         instance.save()
-    #         return Response(
-    #             {"message": "Status updated successfully."}, status=status.HTTP_200_OK
-    #         )
+    def patch(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = ListingStatusUpdateSerializer(data=request.data)
+        if serializer.is_valid(raise_exception=True):
+            listing_status = serializer.validated_data.get(
+                "listing_status", instance.status
+            )
+            verification_status = serializer.validated_data.get(
+                "verification_status", instance.verification_status
+            )
+
+            instance.status = listing_status
+            instance.verification_status = verification_status
+
+            instance.verification_status
+
+            instance.save()
+            return Response(
+                {"message": "Status updated successfully."}, status=status.HTTP_200_OK
+            )
 
     def delete(self, request, *args, **kwargs):
         instance = self.get_object()
