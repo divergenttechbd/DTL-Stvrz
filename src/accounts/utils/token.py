@@ -48,7 +48,7 @@ def generate_cookie_data(access_token: str) -> dict:
     return {
         "key": "cookie_token",
         "value": access_token,
-        "expires": datetime.datetime.utcnow() + datetime.timedelta(hours=5),
+        "expires": datetime.datetime.utcnow() + datetime.timedelta(weeks=4),
         "secure": True,
         "httponly": True,
         "samesite": "None",
