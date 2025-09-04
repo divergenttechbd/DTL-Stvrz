@@ -307,11 +307,14 @@ class AdminUserRetrieveUpdateAPIView(APIView):
 
         final_user_message = " ".join(user_message_parts)
 
-
-        user.first_name = validated_data.get("first_name", user.first_name)
-        user.last_name = validated_data.get("last_name", user.last_name)
-        user.phone_number = validated_data.get("phone_number", user.phone_number)
-        user.email = validated_data.get("email", user.email)
+        if 'first_name' in validated_data:
+            user.first_name = validated_data['first_name']
+        if 'last_name' in validated_data:
+            user.last_name = validated_data['last_name']
+        if 'phone_number' in validated_data:
+            user.phone_number = validated_data['phone_number']
+        if 'email' in validated_data:
+            user.email = validated_data['email']
 
         if user_status_changed:
             user.status = new_user_status
