@@ -123,10 +123,10 @@ class UserLiveVerificationSerializer(Serializer):
 
 
 class StatusUpdateSerializer(Serializer):
-    first_name = CharField(required=False)
-    last_name = CharField(required=False)
-    phone_number = CharField(required=False)
-    email = CharField(required=False)
+    first_name = CharField(required=False, allow_blank=True)
+    last_name = CharField(required=False, allow_blank=True)
+    phone_number = CharField(required=False, allow_blank=True)
+    email = CharField(required=False, allow_blank=True)
     user_status = ChoiceField(choices=["active", "restricted"], required=False)
     identity_status = ChoiceField(choices=["rejected", "verified", "not_verified", "pending"], required=False)
     reject_reason = CharField(required=False, allow_blank=True)

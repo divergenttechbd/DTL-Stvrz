@@ -273,7 +273,19 @@ class AdminUserRetrieveUpdateAPIView(APIView):
 
     @swagger_auto_schema(request_body=StatusUpdateSerializer)
     def patch(self, request, *args, **kwargs):
-        serializer = StatusUpdateSerializer(data=request.data, partial=True)
+
+        filtered_data = {}
+
+        for key, value in request.data.items():
+
+            if isinstance(value, str) and value.strip() == "":
+                continue
+            elif value is None or value == "":
+                continue
+
+            filtered_data[key] = value
+
+        serializer = StatusUpdateSerializer(data=filtered_data, partial=True)
         serializer.is_valid(raise_exception=True)
 
         user = User.objects.get(id=kwargs.get("pk"), is_staff=False)
