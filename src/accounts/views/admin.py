@@ -273,7 +273,7 @@ class AdminUserRetrieveUpdateAPIView(APIView):
 
     @swagger_auto_schema(request_body=StatusUpdateSerializer)
     def patch(self, request, *args, **kwargs):
-        serializer = StatusUpdateSerializer(data=request.data)
+        serializer = StatusUpdateSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
 
         user = User.objects.get(id=kwargs.get("pk"), is_staff=False)
