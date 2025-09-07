@@ -30,15 +30,15 @@ class CouponSerializer(serializers.ModelSerializer):
             'updated_at'
         ]
 
-    def __init__(self, *args, **kwargs):
+    def to_internal_value(self, data):
+        mutable_data = data.copy()
+        if mutable_data.get('valid_from') == '':
+            mutable_data['valid_from'] = timezone.now()
+        if mutable_data.get('valid_to') == '':
+            mutable_data['valid_to'] = None
+        return super().to_internal_value(mutable_data)
 
-        data = kwargs.get('data')
-        if data:
-            if data.get('valid_from') == '':
-                data['valid_from'] = None
-            if data.get('valid_to') == '':
-                data['valid_to'] = None
-        super().__init__(*args, **kwargs)
+
 
     def validate_code(self, value):
 
