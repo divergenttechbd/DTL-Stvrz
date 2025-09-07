@@ -193,14 +193,15 @@ class GuestBookingProcess:
             # ... (generic coupon logic remains the same, using subtotal_before_generic_coupon as order_total) ...
             coupon_info = validate_and_get_coupon_discount_info(
                 coupon_code_input=coupon_code_from_request,
-                order_total=subtotal_before_generic_coupon,
+                order_total=accommodation_charge_after_los,
                 booking_user=user
             )
             coupon_validation_message = coupon_info.get('message', 'Coupon processing failed.')
             booking_applied_coupon_code_value = coupon_info.get('coupon_code_matched', coupon_code_from_request)
             if coupon_info.get('is_valid', False):
-                final_price_to_pay = coupon_info['final_price']
+
                 generic_coupon_discount_amount = coupon_info['discount_amount']
+                final_price_to_pay = subtotal_before_generic_coupon - generic_coupon_discount_amount
                 booking_applied_coupon_type_value = coupon_info['coupon_type']
                 if booking_applied_coupon_type_value == 'referral' and coupon_info.get('coupon_object'):
                     booking_applied_referral_coupon_pk = coupon_info['coupon_object'].pk
@@ -213,6 +214,7 @@ class GuestBookingProcess:
         # Assuming gateway_fee is either fixed or calculated by ListingCheckoutCalculate based on its inputs
         gateway_fee = Decimal(
             str(checkout_data_after_los.get("gateway_fee", "0.00")))  # Get gateway_fee from the latest checkout_data
+
         grand_total_payable = (final_price_to_pay + gateway_fee).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
         original_total_before_discounts = float(total_accommodation_cost_before_los)
