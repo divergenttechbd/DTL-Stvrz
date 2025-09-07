@@ -30,6 +30,16 @@ class CouponSerializer(serializers.ModelSerializer):
             'updated_at'
         ]
 
+    def __init__(self, *args, **kwargs):
+
+        data = kwargs.get('data')
+        if data:
+            if data.get('valid_from') == '':
+                data['valid_from'] = None
+            if data.get('valid_to') == '':
+                data['valid_to'] = None
+        super().__init__(*args, **kwargs)
+
     def validate_code(self, value):
 
         return value.upper()
