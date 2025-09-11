@@ -5,7 +5,7 @@ from django.db.models import Q
 from django.contrib.auth import get_user_model
 from accounts.serializers import UserSerializer
 from base.helpers.utils import identifier_builder
-from base.type_choices import BookingStatusOption, UserTypeOption
+from base.type_choices import BookingStatusOption, UserTypeOption, ListingStatusOption
 from bookings.models import Booking, ListingBookingReview
 from listings.models import Listing, ListingCalendar
 from django.shortcuts import get_object_or_404
@@ -66,10 +66,14 @@ class GuestBookingProcess:
         current_date = Date.today()
         listing_id = request_data.get("listing")
         if not listing_id: return {"status": 400, "message": "Listing ID is required.", "data": None}
+
         try:
             listing_obj = Listing.objects.get(id=listing_id)
         except Listing.DoesNotExist:
             return {"status": 404, "message": "Listing not found.", "data": None}
+
+        if listing_obj.status != ListingStatusOption.PUBLISHED:
+            return {"status": 403, "message": "Property is unpublished.", "data": None}
 
         if listing_obj.require_guest_good_track_record:
 
