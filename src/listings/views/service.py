@@ -65,7 +65,7 @@ class ListingCalendarDataProcess:
                 Q(end_date__isnull=True)
                 | Q(start_date__lte=to_date, end_date__gte=from_date),
                 listing_id=listing_id,
-            ).values(
+            ).order_by('start_date').values(
                 "id",
                 "start_date",
                 "end_date",
