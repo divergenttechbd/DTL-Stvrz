@@ -86,7 +86,7 @@ def booking_confirmed_process(booking_id: str) -> None:
             "content": content,
             "is_read": False,
             "meta": {
-                "listing": None,
+                "listing": {"name": listing.title, "id": listing.id, "unique_id": str(listing.unique_id)},
                 "booking": {"id": booking.id, "invoice_no": booking.invoice_no,
                             "reservation_code": booking.reservation_code},
             },
