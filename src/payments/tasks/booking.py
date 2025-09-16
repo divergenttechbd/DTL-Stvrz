@@ -87,8 +87,29 @@ def booking_confirmed_process(booking_id: str) -> None:
             "is_read": False,
             "meta": {
                 "listing": {"name": listing.title, "id": listing.id, "unique_id": str(listing.unique_id)},
-                "booking": {"id": booking.id, "invoice_no": booking.invoice_no,
-                            "reservation_code": booking.reservation_code},
+                "booking": {
+                    "id": booking.id,
+                    "invoice_no": booking.invoice_no,
+                    "reservation_code": booking.reservation_code,
+                    "booking_date": {
+                        "check_in": str(booking.check_in),
+                        "check_out": str(booking.check_out),
+                        "adult": booking.adult_count,
+                        "children": booking.children_count,
+                        "infant": booking.infant_count,
+                        "total_guest_count": booking.guest_count,
+                    },
+                    "checkout_data": {
+                        "nights": booking.night_count,
+                        "booking_price": booking.price,
+                        "guest_service_charge": booking.guest_service_charge,
+                        "total_price": booking.total_price,
+                        "host_service_charge": booking.host_service_charge,
+                        "host_pay_out": booking.host_pay_out,
+                        "price_info": booking.price_info,
+                        "total_profit": booking.total_profit,
+                    }
+                },
             },
             "created_at": datetime.now(),
             "updated_at": datetime.now(),
