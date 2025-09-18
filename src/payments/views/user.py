@@ -204,7 +204,11 @@ class CustomerSSLCommerzIPNView(views.APIView):
                         event_type=event_type,
                         data={
                             "identifier": booking.invoice_no,
-                            "message": "Congratulations! A guest booked your property just now.",
+                            "message": ( f"📢 Great news! "
+                                            f"Your property '{booking.listing.title}' has just been booked "
+                                            f"from {booking.check_in} to {booking.check_out} "
+                                            f"({booking.night_count} nights, {booking.guest_count} guests)."
+                                        ),
                             # This link takes the host to their dashboard
                             "link": f"/host-dashboard/bookings/{booking.invoice_no}",
                         },
@@ -279,11 +283,19 @@ class CustomerSSLCommerzIPNView(views.APIView):
 
                 send_sms(
                     username=booking.guest.phone_number,
-                    message="Congratulations ! You’ve successfully completed your booking",
+                    message=(
+                                f"🎉 Booking Confirmed! '{booking.listing.title}' "
+                                f"from {booking.check_in} to {booking.check_out}, "
+                                f"{booking.night_count} nights. Invoice: {booking.invoice_no}."
+                            ),
                 )
                 send_sms(
                     username=host.phone_number,
-                    message="Congratulations ! A guest booked your property just now",
+                    message=(
+                                f"📢 New Booking! '{booking.listing.title}' "
+                                f"from {booking.check_in} to {booking.check_out}, "
+                                f"{booking.guest_count} guests. Invoice: {booking.invoice_no}."
+                            ),
                 )
                 booking_confirmed_process.delay(booking_id=booking.id)
 
