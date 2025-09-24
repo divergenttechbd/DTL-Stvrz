@@ -35,7 +35,8 @@ from bookings.filters import UserBookingFilter
 from bookings.models import Booking, ListingBookingReview
 from bookings.serializers import BookingReviewSerializer, BookingSerializer, CouponCheckResponseSerializer
 from bookings.tasks.booking_cancel import booking_cancelled_process
-from bookings.views.service import BookingReviewProcess, GuestBookingProcess
+from bookings.views.service import BookingReviewProcess, GuestBookingProcess, BookingDataFilterProcess, \
+    GuestBookingDataFilterProcess
 from configurations.models import ServiceCharge
 from listings.models import Listing, ListingCalendar
 from notifications.models import Notification
@@ -53,7 +54,12 @@ class GuestBookingListCreateAPIView(ListCreateAPIView):
 
     def get_queryset(self):
         return (
-            Booking.objects.exclude(status=BookingStatusOption.INITIATED)
+            Booking.objects.exclude(status__in=[
+        BookingStatusOption.INITIATED,
+        BookingStatusOption.PENDING_CONFIRMATION,
+        BookingStatusOption.DECLINED,
+        BookingStatusOption.ACCEPTED,
+    ])
             .filter(
                 guest_id=self.request.user.id,
             )
@@ -96,6 +102,56 @@ class GuestBookingListCreateAPIView(ListCreateAPIView):
 
 
 
+class GuestReservationListAPIViewCONF(ListAPIView):
+    permission_classes = (IsAuthenticated, IsGuestUser)
+    serializer_class = BookingSerializer
+    filterset_class = UserBookingFilter
+    http_method_names = ["get"]
+    swagger_tags = ["Gust Bookings"]
+
+    def get_serializer(self, *args, **kwargs):
+        kwargs["context"] = self.get_serializer_context()
+        kwargs["r_method_fields"] = ["listing", "guest", "host"]
+        return self.serializer_class(*args, **kwargs)
+
+    def get_queryset(self):
+        query_param = self.request.GET.get("status")
+        qs = GuestBookingDataFilterProcess()(
+            query_param=query_param, current_user=self.request.user
+        )
+        print(qs, " -------", self.request.user)
+        return qs.select_related("listing", "host").order_by("-created_at")
+
+
+class GuestWithdrawBookingRequestAPIView(APIView):
+    permission_classes = (IsAuthenticated, IsGuestUser)
+    swagger_tags = ["Gust Bookings"]
+
+    @transaction.atomic
+    def delete(self, request, *args, **kwargs):
+        invoice_no = kwargs.get("invoice_no")
+
+        try:
+            # Find the booking request that belongs to the current user
+            # and is in the correct 'pending' state.
+            booking_request = Booking.objects.get(
+                invoice_no=invoice_no,
+                guest=request.user,
+                status=BookingStatusOption.PENDING_CONFIRMATION
+            )
+        except Booking.DoesNotExist:
+            return Response(
+                {"message": "Pending booking request not found or you do not have permission to withdraw it."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # If the booking is found, delete it.
+        booking_request.delete()
+
+        return Response(
+            {"message": "Your booking request has been successfully withdrawn."},
+            status=status.HTTP_200_OK  # Or 204 No Content for DELETE operations
+        )
 
 class GuestPendingReviewsAPIView(ListAPIView):
     """

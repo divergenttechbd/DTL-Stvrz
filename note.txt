@@ -346,15 +346,22 @@ celery =============
     -  celery -A myproject.settings.celery worker -l info
     - celery -A myproject.settings.celery beat -l info
 
-    - nohup celery -A myproject.settings.celery worker -l info > ../logs/celery-worker.log 2>&1 &
-    - nohup celery -A myproject.settings.celery beat -l info > ../logs/celery-beat.log 2>&1 &
+    - nohup celery -A myproject.settings.celery worker -l info > /home/logs/celery-worker.log 2>&1 &
+    - nohup celery -A myproject.settings.celery beat -l info > /home/logs/celery-beat.log 2>&1 &
 
     - tail -f /var/www/html/stayverz/DTL-Stayverz/logs/celery-worker.log
     - tail -f /var/www/html/stayverz/DTL-Stayverz/logs/celery-beat.log
 
-    nohup python manage.py runserver 192.168.7.26:8000 &
+    nohup python manage.py runserver 143.110.191.153:8000 &
+
     ps aux | grep manage.py
     ps aux | grep 'celery'
+
+    poetry run uvicorn src.server:app --host 0.0.0.0 --port 5000
+    poetry run gunicorn -k uvicorn.workers.UvicornWorker src.server:app --bind 0.0.0.0:5000 --daemon
+
+    ps aux | grep gunicorn
+
 
     //todo: otp setting / their fcm / dynamic link url
 

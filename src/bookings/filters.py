@@ -50,3 +50,13 @@ class BookingReviewFilter(filters.FilterSet):
         if value == "false":
             return queryset
         return queryset.filter(Q(review_by_id=value) | Q(review_for_id=value))
+
+
+class UserBookingFilterX(filters.FilterSet):
+    # Add the status field to the filter
+    status = filters.ChoiceFilter(choices=BookingStatusOption.choices)
+
+    class Meta:
+        model = Booking
+        # Include 'status' in the list of filterable fields
+        fields = ["status"]

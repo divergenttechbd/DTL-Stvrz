@@ -10,6 +10,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.generics import ListAPIView, views
 from rest_framework.response import Response
 from rest_framework import status
+
+from accounts.tasks.users import send_sms
 from base.permissions import HostUserHasObjectAccess, IsHostUser, IsPrimaryHostOrActiveCoHost
 
 from base.helpers.classes import DTEncoder
@@ -26,6 +28,7 @@ from bookings.models import Booking, ListingBookingReview
 from bookings.serializers import BookingReviewSerializer, BookingSerializer
 from bookings.views.service import BookingDataFilterProcess, BookingReviewProcess
 from listings.utils import get_user_with_profile
+from listings.views.service import ListingCalendarDataProcess
 from notifications.models import Notification
 from notifications.utils import create_notification, send_notification
 
@@ -50,8 +53,201 @@ class HostReservationListAPIView(ListAPIView):
         qs = BookingDataFilterProcess()(
             query_param=query_param, current_user=self.request.user
         )
+        print(qs, " -------")
         return qs.select_related("listing", "guest").order_by("-created_at")
 
+
+class HostReservationListAPIViewCONF(ListAPIView):
+    permission_classes = (IsAuthenticated, IsHostUser)
+    serializer_class = BookingSerializer
+    filterset_class = UserBookingFilter
+    http_method_names = ["get"]
+    swagger_tags = ["Host Bookings"]
+
+    def get_serializer(self, *args, **kwargs):
+        kwargs["context"] = self.get_serializer_context()
+        kwargs["r_method_fields"] = ["listing", "guest"]
+        return self.serializer_class(*args, **kwargs)
+
+    def get_queryset(self):
+        query_param = self.request.GET.get("status")
+        qs = BookingDataFilterProcess()(
+            query_param=query_param, current_user=self.request.user
+        )
+        print(qs, " -------")
+        return qs.select_related("listing", "guest").order_by("-created_at")
+
+
+class HostAcceptBookingRequestAPIView(views.APIView):
+    permission_classes = (IsAuthenticated, IsHostUser)  # Assuming IsHostUser permission
+    swagger_tags = ["Host Bookings"]
+
+    @transaction.atomic  # Ensure all database operations are atomic for data integrity
+    def post(self, request, *args, **kwargs):
+        invoice_no = kwargs.get("invoice_no")
+        try:
+            # Lock the booking row we intend to accept to prevent race conditions
+            # Eager load related objects to avoid extra database queries later
+            booking_to_accept = Booking.objects.select_related('listing', 'guest').select_for_update().get(
+                invoice_no=invoice_no,
+                host=request.user,
+                status=BookingStatusOption.PENDING_CONFIRMATION
+            )
+        except Booking.DoesNotExist:
+            return Response({"message": "Pending booking request not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        listing = booking_to_accept.listing
+
+        # --- 1. FINAL AVAILABILITY CHECK ---
+        # Check if another booking was confirmed (paid for) while this one was pending.
+        calendar_check_end_date = booking_to_accept.check_out - timedelta(days=1)
+        calendar_data_process = ListingCalendarDataProcess()
+        availability_data = calendar_data_process(
+            data={"from_date": booking_to_accept.check_in, "to_date": calendar_check_end_date},
+            listing_id=listing.id
+        )
+
+        # Loop through the dates to see if any have become blocked or booked by someone else
+        for date_str, data in availability_data.items():
+            if data.get("is_blocked") or data.get("is_booked"):
+                # A confirmed booking took the slot. This request must be declined.
+                booking_to_accept.status = BookingStatusOption.DECLINED
+                booking_to_accept.cancellation_reason = 'Declined by system: Dates became unavailable before host could accept.'
+                booking_to_accept.save()
+
+                # Notify the guest that their request was auto-declined
+                # (This is important for user experience)
+                guest_notification = create_notification(
+                    event_type=NotificationEventTypeOption.BOOKING_REQUEST_DECLINED,
+                    data={
+                        "identifier": booking_to_accept.invoice_no,
+                        "message": f"Unfortunately, the dates for your request for '{listing.title}' became unavailable before the host could accept.",
+                        "link": f"/bookings/{booking_to_accept.invoice_no}",
+                    },
+                    n_type=NotificationTypeOption.USER_NOTIFICATION,
+                    user_id=booking_to_accept.guest.id,
+                )
+                send_notification(notification_data=[guest_notification])
+
+                return Response(
+                    {
+                        "message": f"Cannot accept. The date {date_str} is no longer available. The booking request has been automatically declined."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # --- 2. ACCEPT THE CURRENT BOOKING ---
+        # This code only runs if the availability check passes.
+        booking_to_accept.status = BookingStatusOption.ACCEPTED
+        booking_to_accept.save()
+
+        # --- 3. AUTO-DECLINE OTHER CONFLICTING PENDING BOOKINGS ---
+        # Find all *other* pending requests for the same listing that overlap with the accepted dates.
+        conflicting_pending_bookings = Booking.objects.filter(
+            listing=listing,
+            status=BookingStatusOption.PENDING_CONFIRMATION,
+            check_in__lt=booking_to_accept.check_out,  # Starts before our booking ends
+            check_out__gt=booking_to_accept.check_in  # Ends after our booking starts
+        ).exclude(pk=booking_to_accept.pk)  # Exclude the one we just accepted
+
+        declined_notifications = []
+        for conflicting_booking in conflicting_pending_bookings:
+            conflicting_booking.status = BookingStatusOption.DECLINED
+            conflicting_booking.cancellation_reason = "Declined by system: Host accepted another booking for these dates."
+            conflicting_booking.save()
+
+            # Prepare notifications for the guests of the auto-declined bookings
+            declined_notifications.append(create_notification(
+                event_type=NotificationEventTypeOption.BOOKING_REQUEST_DECLINED,
+                data={
+                    "identifier": conflicting_booking.invoice_no,
+                    "message": f"Unfortunately, your request for '{listing.title}' was declined as the host accepted another booking for the requested dates.",
+                    "link": f"/bookings/{conflicting_booking.invoice_no}",
+                },
+                n_type=NotificationTypeOption.USER_NOTIFICATION,
+                user_id=conflicting_booking.guest_id,
+            ))
+            if conflicting_booking.guest.phone_number:
+                send_sms(
+                    username=conflicting_booking.guest.phone_number,
+                    message=f"Your request for '{listing.title}' was declined as the dates are no longer available."
+                )
+
+        # Send all "declined" notifications in one batch if any exist
+        if declined_notifications:
+            send_notification(notification_data=declined_notifications)
+
+        # --- 4. NOTIFY THE ACCEPTED GUEST ---
+        accepted_guest_notification = create_notification(
+            event_type=NotificationEventTypeOption.BOOKING_REQUEST_ACCEPTED,
+            data={
+                "identifier": booking_to_accept.invoice_no,
+                "message": f"Good news! Your request for '{booking_to_accept.listing.title}' has been accepted. Please complete your payment.",
+                "link": f"/bookings/{booking_to_accept.invoice_no}",
+            },
+            n_type=NotificationTypeOption.USER_NOTIFICATION,
+            user_id=booking_to_accept.guest.id,
+        )
+        send_notification(notification_data=[accepted_guest_notification])
+
+        if booking_to_accept.guest.phone_number:
+            send_sms(
+                username=booking_to_accept.guest.phone_number,
+                message=f"Your booking for '{booking_to_accept.listing.title}' was accepted! Please complete payment. Invoice: {booking_to_accept.invoice_no}"
+            )
+
+        return Response(
+            {"message": "Booking request accepted. Conflicting pending requests have been declined."},
+            status=status.HTTP_200_OK
+        )
+
+
+class HostDeclineBookingRequestAPIView(views.APIView):
+    permission_classes = (IsAuthenticated, IsHostUser)
+    swagger_tags = ["Host Bookings"]
+
+    def post(self, request, *args, **kwargs):
+        invoice_no = kwargs.get("invoice_no")
+        reason = request.data.get("reason")
+        if not reason:
+            return Response({"message": "A reason is required to decline a booking."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            booking = Booking.objects.get(
+                invoice_no=invoice_no,
+                host=request.user,
+                status=BookingStatusOption.PENDING_CONFIRMATION
+            )
+        except Booking.DoesNotExist:
+            return Response({"message": "Pending booking request not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        booking.status = BookingStatusOption.DECLINED
+        booking.cancellation_reason = f"Declined by host: {reason}"
+        booking.save()
+
+        # TODO: Send notification to guest that their request was declined
+
+        guest_notification = create_notification(
+            event_type=NotificationEventTypeOption.BOOKING_REQUEST_DECLINED,  # Use a specific event type
+            data={
+                "identifier": booking.invoice_no,
+                "message": f"Unfortunately, your booking request for '{booking.listing.title}' was declined by the host.",
+                "link": f"/bookings/{booking.invoice_no}",
+            },
+            n_type=NotificationTypeOption.USER_NOTIFICATION,
+            user_id=booking.guest.id,
+        )
+
+        notification_data = [guest_notification]
+        send_notification(notification_data=notification_data)
+
+        if booking.guest.phone_number:
+            send_sms(
+                username=booking.guest.phone_number,
+                message=f"Your booking request for '{booking.listing.title}' was declined by the host."
+            )
+
+        return Response({"message": "Booking request has been declined."}, status=status.HTTP_200_OK)
 
 class HostReservationRetrieveAPIView(views.APIView):
     permission_classes = (IsAuthenticated,)

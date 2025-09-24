@@ -69,6 +69,10 @@ class BookingStatusOption(models.TextChoices):
     INITIATED = "initiated", "initiated"
     CONFIRMED = "confirmed", "confirmed"
     CANCELLED = "cancelled", "cancelled"
+    PENDING_CONFIRMATION = "pending_conf", "pending_conf"
+    DECLINED = "declined", "declined"
+    ACCEPTED = "accepted", "accepted"
+
 
 
 class OnlinePaymentMethodOption(models.TextChoices):
@@ -107,6 +111,9 @@ class BlogStatusOption(models.TextChoices):
 
 
 class NotificationEventTypeOption(models.TextChoices):
+    BOOKING_REQUEST_DECLINED = "booking_decline", "booking_decline"
+    BOOKING_REQUEST_ACCEPTED = "booking_accepted", "booking_accepted"
+    BOOKING_REQUEST_CONF = "booking_conformation", "booking_conformation"
     BOOKING_CONFIRMED = "booking_confirmed", "booking_confirmed"
     BOOKING_CANCELLED = "booking_cancelled", "booking_cancelled"
     BOOKING_INQUIRY = "booking_inquiry", "booking_inquiry"

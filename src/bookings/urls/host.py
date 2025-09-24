@@ -5,7 +5,8 @@ from bookings.views.host import (
     HostReservationRetrieveAPIView,
     HostBookingReviewAPIView,
     HostBookingReviewRetrieveAPIView,
-    HostReservationStatsApiView,
+    HostReservationStatsApiView, HostAcceptBookingRequestAPIView, HostDeclineBookingRequestAPIView,
+    HostReservationListAPIViewCONF,
 )
 
 app_name = "host"
@@ -14,6 +15,12 @@ urlpatterns = [
     path(
         "reservations/",
         HostReservationListAPIView.as_view(),
+        name="reservation_list",
+    ),
+
+    path(
+        "reservations/instant-booking/",
+        HostReservationListAPIViewCONF.as_view(),
         name="reservation_list",
     ),
     path(
@@ -35,5 +42,16 @@ urlpatterns = [
         "reservation-stats/",
         HostReservationStatsApiView.as_view(),
         name="reservation_stats",
+    ),
+
+path(
+        "reservations/<str:invoice_no>/accept/",
+        HostAcceptBookingRequestAPIView.as_view(),
+        name="host_accept_booking",
+    ),
+    path(
+        "reservations/<str:invoice_no>/decline/",
+        HostDeclineBookingRequestAPIView.as_view(),
+        name="host_decline_booking",
     ),
 ]

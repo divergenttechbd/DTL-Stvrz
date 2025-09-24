@@ -6,7 +6,7 @@ from bookings.views.user import (
     GuestBookingReviewAPIView,
     GuestBookingReviewRetrieveAPIView,
     GuestBookingCancelAPIView, ValidateCouponAPIView, DownloadInvoiceAPIView, GuestBookingCancelAdminAPIView,
-    GuestPendingReviewsAPIView,
+    GuestPendingReviewsAPIView, GuestReservationListAPIViewCONF, GuestWithdrawBookingRequestAPIView,
 )
 
 app_name = "user"
@@ -16,6 +16,18 @@ urlpatterns = [
         "bookings/",
         GuestBookingListCreateAPIView.as_view(),
         name="booking_list_create",
+    ),
+
+    path(
+        "reservations/instant-booking/",
+        GuestReservationListAPIViewCONF.as_view(),
+        name="reservation_list",
+    ),
+
+path(
+        "bookings/instant-booking/<str:invoice_no>/withdraw/",
+        GuestWithdrawBookingRequestAPIView.as_view(),
+        name="booking_withdraw",
     ),
 
     path(

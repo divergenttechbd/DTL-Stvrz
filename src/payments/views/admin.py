@@ -72,7 +72,12 @@ class AdminHostPaymentListCreateAPIView(ListCreateAPIView):
     def create(self, request, *args, **kwargs):
         booking_ids = request.data["booking_ids"]
         booking_objs = list(
-            Booking.objects.exclude(status=BookingStatusOption.INITIATED)
+            Booking.objects.exclude(status__in=[
+        BookingStatusOption.INITIATED,
+        BookingStatusOption.PENDING_CONFIRMATION,
+        BookingStatusOption.DECLINED,
+        BookingStatusOption.ACCEPTED,
+    ])
             .filter(id__in=booking_ids)
             .values(
                 "id",

@@ -4,13 +4,16 @@ from typing import Any
 from django.db.models import Q
 from django.contrib.auth import get_user_model
 from accounts.serializers import UserSerializer
+from accounts.tasks.users import send_sms
 from base.helpers.utils import identifier_builder
-from base.type_choices import BookingStatusOption, UserTypeOption, ListingStatusOption
+from base.type_choices import BookingStatusOption, UserTypeOption, ListingStatusOption, NotificationEventTypeOption, \
+    NotificationTypeOption
 from bookings.models import Booking, ListingBookingReview
 from listings.models import Listing, ListingCalendar
 from django.shortcuts import get_object_or_404
 
 from listings.views.service import ListingCalendarDataProcess, ListingCheckoutCalculate
+from notifications.utils import create_notification, send_notification
 from ..coupon_service import validate_and_get_coupon_discount_info
 from typing import Dict
 
@@ -25,7 +28,7 @@ from listings.models import Listing
 from listings.views.service import ListingCalendarDataProcess, ListingCheckoutCalculate
 # Assuming coupon_service.py is in the same app 'bookings'
 from bookings.coupon_service import validate_and_get_coupon_discount_info
-
+from django.utils import timezone
 
 
 User = get_user_model()
@@ -181,6 +184,42 @@ class GuestBookingProcess:
         # checkout_data_after_los['guest_service_charge'] = calculated on this new 'booking_price'
         # checkout_data_after_los['total_price'] = new 'booking_price' + new 'guest_service_charge'
 
+
+
+        initial_status = ""
+        expiry_date = None
+        response_message = ""
+
+        if listing_obj.instant_booking_allowed:
+            initial_status = BookingStatusOption.INITIATED
+            response_message = "Booking initiated. Please proceed to payment."
+        else:
+            initial_status = BookingStatusOption.PENDING_CONFIRMATION
+            response_message = "Booking request sent to host. You will be notified upon confirmation."
+            host_noti = create_notification(
+                event_type=NotificationEventTypeOption.BOOKING_REQUEST_CONF,
+                data={
+                    "identifier": listing_id,
+                    "message": f"A request sent to host for confirmation.",
+                    "link": f"/listing/{listing_id}",
+                },
+                n_type=NotificationTypeOption.USER_NOTIFICATION,
+                user_id=listing_obj.host_id,
+            )
+
+            notification_data = [host_noti]
+            send_notification(notification_data=notification_data)
+
+            if listing_obj.host.phone_number:
+                send_sms(
+                    username=listing_obj.host.phone_number,
+                    message=f"You have a new booking request for '{listing_obj.title}'. Please review and confirm. "
+                )
+
+
+
+
+
         subtotal_before_generic_coupon = Decimal(str(checkout_data_after_los.get("total_price", "0.00")))
 
         # --- 4. Apply Generic Coupon ---
@@ -251,6 +290,8 @@ class GuestBookingProcess:
             "gateway_fee": float(gateway_fee),
             "total_price": float(grand_total_payable),  # FINAL amount guest pays
             "paid_amount": 0.00,  # Initial value
+
+            "status":initial_status,
 
             "host_service_charge": float(checkout_data_after_los.get("host_service_charge", 0.00)),
             "host_pay_out": float(checkout_data_after_los.get("host_pay_out", 0.00)),
@@ -323,7 +364,7 @@ class GuestBookingProcess:
 
         print(" === ", data_for_serializer, " ===")
 
-        return {"status": 200, "message": coupon_validation_message, "data": data_for_serializer}
+        return {"status": 200, "message": response_message, "data": data_for_serializer}
 
 
 class BookingReviewProcess:
@@ -426,6 +467,24 @@ class BookingDataFilterProcess:
                 host_id=current_user.id,
                 check_out=current_date,
             )
+        elif query_param == 'pending_conf':
+            print(" pending x")
+            qs = Booking.objects.filter(
+                status=BookingStatusOption.PENDING_CONFIRMATION,
+                host_id=current_user.id
+            )
+        elif query_param == 'accepted':
+            print(" pending x")
+            qs = Booking.objects.filter(
+                status=BookingStatusOption.ACCEPTED,
+                host_id=current_user.id
+            )
+        elif query_param == 'declined':
+            print(" pending x")
+            qs = Booking.objects.filter(
+                status=BookingStatusOption.DECLINED,
+                host_id=current_user.id
+            )
         elif query_param == "arriving_soon":
             qs = Booking.objects.filter(
                 status=BookingStatusOption.CONFIRMED,
@@ -435,6 +494,77 @@ class BookingDataFilterProcess:
                 check_in__lte=current_date + timedelta(days=7),
             )
         else:
+            print(" === ")
+            qs = Booking.objects.filter(
+                host_id=current_user.id,
+                status=BookingStatusOption.CONFIRMED,
+            )
+
+        return qs
+
+
+class GuestBookingDataFilterProcess:
+    def __call__(self, query_param, current_user):
+        current_date = Date.today()
+        if query_param == "currently_hosting":
+            qs = Booking.objects.filter(
+                Q(check_in__lte=current_date) & Q(check_out__gte=current_date),
+                guest_id=current_user.id,
+                status=BookingStatusOption.CONFIRMED,
+            )
+        elif query_param == "completed":
+            qs = Booking.objects.filter(
+                status=BookingStatusOption.CONFIRMED,
+                check_out__lt=current_date,
+                guest_id=current_user.id,
+            )
+        elif query_param == "upcoming":
+            qs = Booking.objects.filter(
+                status=BookingStatusOption.CONFIRMED,
+                check_in__gt=current_date,
+                guest_id=current_user.id,
+            )
+        elif query_param == "pending_review":
+            qs = Booking.objects.filter(
+                status=BookingStatusOption.CONFIRMED,
+                host_review_done=False,
+                guest_id=current_user.id,
+                check_out__lt=current_date,
+            )
+        elif query_param == "checking_out":
+            qs = Booking.objects.filter(
+                status=BookingStatusOption.CONFIRMED,
+                guest_id=current_user.id,
+                check_out=current_date,
+            )
+        elif query_param == 'pending_conf':
+            print(" pending x")
+            qs = Booking.objects.filter(
+                status=BookingStatusOption.PENDING_CONFIRMATION,
+                guest_id=current_user.id
+            )
+        elif query_param == 'accepted':
+            print(" pending x")
+            qs = Booking.objects.filter(
+                status=BookingStatusOption.ACCEPTED,
+                guest_id=current_user.id
+            )
+        elif query_param == 'declined':
+            print(" pending x")
+            qs = Booking.objects.filter(
+                status=BookingStatusOption.DECLINED,
+                guest_id=current_user.id
+            )
+        elif query_param == "arriving_soon":
+            qs = Booking.objects.filter(
+                status=BookingStatusOption.CONFIRMED,
+                guest_id=current_user.id,
+                # check_in__gte=current_date + timedelta(days=3),
+                check_in__gte=current_date + timedelta(days=1),
+                check_in__lte=current_date + timedelta(days=7),
+            )
+        else:
+            print(" === ")
             qs = Booking.objects.filter(
                 host_id=current_user.id,
                 status=BookingStatusOption.CONFIRMED,

@@ -31,7 +31,12 @@ class AdminLatestBookingListAPIView(APIView):
 
     def get(self, request, *args, **kwargs):
         qs = (
-            Booking.objects.exclude(status=BookingStatusOption.INITIATED)
+            Booking.objects.exclude(status__in=[
+        BookingStatusOption.INITIATED,
+        BookingStatusOption.PENDING_CONFIRMATION,
+        BookingStatusOption.DECLINED,
+        BookingStatusOption.ACCEPTED,
+    ])
             .filter()
             .select_related("listing", "guest", "host")
             .order_by("-updated_at")
@@ -67,7 +72,12 @@ class AdminBookingListAPIView(generics.ListAPIView):
     def get_queryset(self):
         current_date = date.today()
         query_param = self.request.GET.get("event_type")
-        qs = Booking.objects.exclude(status=BookingStatusOption.INITIATED)
+        qs = Booking.objects.exclude(status__in=[
+        BookingStatusOption.INITIATED,
+        BookingStatusOption.PENDING_CONFIRMATION,
+        BookingStatusOption.DECLINED,
+        BookingStatusOption.ACCEPTED,
+    ])
         # qs = Booking.objects.filter(status=BookingStatusOption.CONFIRMED)
 
         # qs = Booking.objects.filter()
@@ -423,7 +433,12 @@ class AdminBookingReportDownloadAPIView(APIView):
             dhaka_date_time = utc_date_time.astimezone(dhaka_timezone).date()
             formatted_filters["created_at__lte"] = dhaka_date_time
 
-        qs = Booking.objects.exclude(status=BookingStatusOption.INITIATED).filter(
+        qs = Booking.objects.exclude(status__in=[
+        BookingStatusOption.INITIATED,
+        BookingStatusOption.PENDING_CONFIRMATION,
+        BookingStatusOption.DECLINED,
+        BookingStatusOption.ACCEPTED,
+    ]).filter(
             **formatted_filters
         )
 
