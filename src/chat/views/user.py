@@ -17,7 +17,7 @@ from listings.views.service import ListingCalendarDataProcess, ListingCheckoutCa
 from notifications.models import FCMToken, Notification
 from notifications.tasks.notification import send_fcm_notification
 from notifications.utils import create_notification, send_notification
-
+import re
 User = get_user_model()
 
 
@@ -36,6 +36,15 @@ class UserChatApiView(views.APIView):
         except KeyError as e:
             return Response({"message": f"Missing required field: {e}"}, status=status.HTTP_400_BAD_REQUEST)
 
+        if is_contact_info_present(message):
+            return Response(
+                {
+                    "message": "Sending contact information is not allowed. Please use the platform's messaging system for communication.",
+                    "error_type": "contact_info_forbidden"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         try:
             listing = Listing.objects.select_related('host').get(id=listing_id)
 
@@ -44,6 +53,8 @@ class UserChatApiView(views.APIView):
                 return Response({"message": "Invalid host for the given listing."}, status=status.HTTP_400_BAD_REQUEST)
         except Listing.DoesNotExist:
             return Response({"message": "Listing not found."}, status=status.HTTP_404_NOT_FOUND)
+
+
 
         from_date = datetime.strptime(booking_data["check_in"], "%Y-%m-%d").date()
         to_date = datetime.strptime(booking_data["check_out"], "%Y-%m-%d").date()
@@ -209,3 +220,204 @@ class UserChatApiView(views.APIView):
             {"message": "Message sent to hosting team", "data": {"chat_room_id": str(room_id)}},
             status=status.HTTP_201_CREATED,
         )
+
+
+def is_likely_uuid(text: str) -> bool:
+    """
+    Check if a string is likely a UUID based on length and alphanumeric content
+    """
+    clean_text = re.sub(r'[-_\s{}()]', '', text)
+
+    if re.match(r'^[0-9a-fA-F]+$', clean_text):
+        if len(clean_text) >= 28 and len(clean_text) <= 36:
+            return True
+    return False
+
+
+def remove_uuids_from_message(message: str) -> str:
+    """
+    Remove UUIDs and UUID-like strings from message
+    """
+    UUID_REGEX = re.compile(
+        r'\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b'
+    )
+
+    UUID_VARIANTS_REGEX = re.compile(
+        r'''
+        (?:
+            \b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b|
+            \b[0-9a-fA-F]{32}\b|
+            \b[0-9a-fA-F]{8}\s[0-9a-fA-F]{4}\s[0-9a-fA-F]{4}\s[0-9a-fA-F]{4}\s[0-9a-fA-F]{12}\b|
+            \b[0-9a-fA-F]{8}_[0-9a-fA-F]{4}_[0-9a-fA-F]{4}_[0-9a-fA-F]{4}_[0-9a-fA-F]{12}\b|
+            \{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}
+        )
+        ''',
+        re.VERBOSE | re.IGNORECASE
+    )
+
+    cleaned_message = UUID_REGEX.sub('', message)
+    cleaned_message = UUID_VARIANTS_REGEX.sub('', cleaned_message)
+
+    words = cleaned_message.split()
+    filtered_words = []
+    for word in words:
+        if not is_likely_uuid(word):
+            filtered_words.append(word)
+
+    return ' '.join(filtered_words)
+
+
+def is_bangladesh_phone_number(digits_only: str) -> bool:
+    """
+    Check if a digit sequence is a valid Bangladesh phone number
+    """
+    if len(digits_only) < 10:
+        return False
+
+    valid_prefixes_without_0 = ['13', '14', '15', '16', '17', '18', '19']
+
+    # Check standard 11-digit format with leading 0: 01XXXXXXXXX
+    if len(digits_only) == 11 and digits_only.startswith('01'):
+        prefix = digits_only[1:3]
+        if prefix in valid_prefixes_without_0:
+            return True
+
+    # Check 10-digit format WITHOUT leading 0: 1XXXXXXXXX
+    if len(digits_only) == 10 and digits_only.startswith('1'):
+        prefix = digits_only[0:2]
+        if prefix in valid_prefixes_without_0:
+            return True
+
+    # Check international formats
+    if len(digits_only) >= 12:
+        if len(digits_only) == 13 and digits_only.startswith('8801'):
+            prefix = digits_only[4:6]
+            if prefix in valid_prefixes_without_0:
+                return True
+
+        if len(digits_only) == 14 and digits_only.startswith('88001'):
+            prefix = digits_only[5:7]
+            if prefix in valid_prefixes_without_0:
+                return True
+
+        if len(digits_only) == 12 and digits_only.startswith('881'):
+            prefix = digits_only[2:4]
+            if prefix in valid_prefixes_without_0:
+                return True
+
+    return False
+
+
+def is_phone_number_present(message: str) -> bool:
+    """
+    Enhanced phone number detection for Bangladesh numbers
+    """
+    cleaned_message = remove_uuids_from_message(message).strip()
+    if not cleaned_message:
+        return False
+
+    # Remove JSON structure and common non-phone contexts
+    temp_message = cleaned_message
+    temp_message = re.sub(r"'[^']*':\s*\d+", "", temp_message)
+    temp_message = re.sub(r'"[^"]*":\s*\d+', "", temp_message)
+    temp_message = re.sub(r'BDT\s*\d+', '', temp_message)
+    temp_message = re.sub(r'\d+/per\s+\w+', '', temp_message)
+    temp_message = re.sub(r'\d+(?:st|nd|rd|th)\s+floor', '', temp_message)
+    temp_message = re.sub(r'https?://[^\s\'\"]+', '', temp_message)
+    temp_message = re.sub(r'(?:price|cost|rent|amount|fee|charge|total|sum)[\s\-:]*\d+', '', temp_message,
+                          flags=re.IGNORECASE)
+    temp_message = re.sub(r'\d+[\s\-]*(?:taka|tk|bdt|dollar|usd|euro)', '', temp_message, flags=re.IGNORECASE)
+
+    separators = r'[\s\-_\.,:;|/\\~`!@#$%^&*()+=\[\]{}\'"><]'
+    special_chars_escaped = re.escape(".-*_~!@#$%^&()+=[]{}|\\:;\"'<>?/,")
+
+    # Phone number detection patterns
+    phone_patterns = [
+        # Bangladesh country code patterns
+        rf'(?:\+?880{separators}*|{separators}*\+?88{separators}*)0?1[0-9](?:{separators}*\d){{8,9}}',
+        # Standard Bangladesh mobile patterns
+        rf'(?<!\d)01[0-9](?:{separators}*\d){{8,9}}(?!\d)',
+        rf'(?<!\d)0{separators}*1{separators}*[0-9](?:{separators}*\d){{8,9}}(?!\d)',
+        # Without leading 0
+        rf'(?<!\d)1[3-9](?:{separators}*\d){{8}}(?!\d)',
+        rf'(?<!\d)1[3-9]{separators}+\d{{4}}{separators}+\d{{4}}(?!\d)',
+        # Context-based detection
+        rf'(?:phone|mobile|call|contact|number|dial|reach|whatsapp|telegram){separators}*(?:is{separators}*|:{separators}*)?1[3-9](?:{separators}*\d){{8}}',
+        # International format without leading 0
+        rf'\+{separators}*880{separators}*1[3-9](?:{separators}*\d){{8}}',
+        # Any 10-11 digit sequence with valid BD prefixes
+        rf'(?<!\d)(?:13|14|15|16|17|18|19)(?:{separators}*\d){{7,8}}(?!\d)',
+    ]
+
+    # Check all patterns
+    for pattern in phone_patterns:
+        matches = re.findall(pattern, temp_message, re.IGNORECASE)
+        for match in matches:
+            digits_only = re.sub(r'[^\d]', '', match)
+            if is_bangladesh_phone_number(digits_only):
+                return True
+
+    # Final check for all digit sequences
+    all_digit_sequences = re.findall(r'(?:\+?\d+(?:[\s\-\._,;:!@#$%^&*()+=\[\]{}|\\/<>?`~\'\"]*\d+)*)', temp_message)
+
+    for sequence in all_digit_sequences:
+        digits_only = re.sub(r'[^\d]', '', sequence)
+        if is_bangladesh_phone_number(digits_only):
+            sequence_position = temp_message.find(sequence)
+            if sequence_position >= 0:
+                start_pos = max(0, sequence_position - 10)
+                end_pos = min(len(temp_message), sequence_position + len(sequence) + 10)
+                context = temp_message[start_pos:end_pos].lower()
+
+                non_phone_indicators = [
+                    'price', 'cost', 'rent', 'amount', 'fee', 'charge', 'total', 'sum',
+                    'taka', 'tk', 'bdt', 'dollar', 'usd', 'euro', 'year', 'age',
+                    'floor', 'room', 'house', 'building', 'address', 'zip', 'postal'
+                ]
+
+                is_non_phone = any(indicator in context for indicator in non_phone_indicators)
+                if not is_non_phone:
+                    return True
+
+    return False
+
+
+def is_email_present(message: str) -> bool:
+    """
+    Conservative email detection
+    """
+    basic_email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'
+
+    if re.search(basic_email_pattern, message):
+        return True
+
+    # Check for obvious email obfuscation attempts
+    obfuscation_patterns = [
+        r'[A-Za-z0-9._%+-]+\s*(?:at|AT)\s*[A-Za-z0-9.-]+\s*(?:dot|DOT)\s*(?:com|org|net|edu|gov)',
+        r'[A-Za-z0-9._%+-]+\s*[\(\[\{]at[\)\]\}]\s*[A-Za-z0-9.-]+\s*[\(\[\{]dot[\)\]\}]\s*[A-Za-z]{2,4}',
+        r'(?:email|e-mail|mail|contact)[\s\-:]*(?:is|address)?[\s\-:]*[A-Za-z0-9._%+-]+[@at][A-Za-z0-9.-]+[.dot][A-Za-z]{2,4}',
+    ]
+
+    for pattern in obfuscation_patterns:
+        if re.search(pattern, message, re.IGNORECASE):
+            return True
+
+    return False
+
+
+def is_contact_info_present(message: str) -> bool:
+    """
+    Enhanced contact info detection
+    """
+    message_without_uuids = remove_uuids_from_message(message).strip()
+    if not message_without_uuids:
+        return False
+
+    if is_email_present(message):
+        return True
+
+    if is_phone_number_present(message):
+        return True
+
+    return False
+
