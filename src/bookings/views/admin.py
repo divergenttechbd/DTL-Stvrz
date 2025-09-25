@@ -308,7 +308,9 @@ class AdminBookingStatisticsAPIView(APIView):
             month = entry["month"]
             b_status = entry["status"]
             count = entry["count"]
-            monthly_booking_counts[month][b_status] += count
+
+            if b_status in booking_statuses:
+                monthly_booking_counts[month][b_status] += count
 
         return Response({"data": monthly_booking_counts}, status=status.HTTP_200_OK)
 
