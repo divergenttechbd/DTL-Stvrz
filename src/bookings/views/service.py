@@ -506,6 +506,42 @@ class BookingDataFilterProcess:
 class GuestBookingDataFilterProcess:
     def __call__(self, query_param, current_user):
         current_date = Date.today()
+        base_qs = Booking.objects.filter(guest_id=current_user.id)
+
+        if query_param == "pending_conf":
+
+            pending_requests = base_qs.filter(status=BookingStatusOption.PENDING_CONFIRMATION).select_related('listing')
+
+            requests_to_decline_ids = []
+
+
+            for booking in pending_requests:
+
+                calendar_process = ListingCalendarDataProcess()
+                end_date_for_check = booking.check_out - timedelta(days=1)
+                availability_data = calendar_process(
+                    data={"from_date": booking.check_in, "to_date": end_date_for_check},
+                    listing_id=booking.listing.id
+                )
+
+
+                is_still_available = True
+                for date_str, data in availability_data.items():
+                    if data.get("is_blocked") or data.get("is_booked"):
+                        is_still_available = False
+                        break
+
+
+                if not is_still_available:
+                    requests_to_decline_ids.append(booking.id)
+
+
+            if requests_to_decline_ids:
+                Booking.objects.filter(id__in=requests_to_decline_ids).update(
+                    status=BookingStatusOption.DECLINED,
+                    cancellation_reason="Declined by system: Dates became unavailable while request was pending."
+                )
+
         if query_param == "currently_hosting":
             qs = Booking.objects.filter(
                 Q(check_in__lte=current_date) & Q(check_out__gte=current_date),
