@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import timedelta, date
 
 from django.conf import settings
 from django.db import transaction
@@ -81,6 +81,15 @@ class UserSSLCommerzOrderPaymentView(CreateAPIView):
                                         "message": f"Payment can only be made for accepted/ initialed bookings. Current status is '{booking.get_status_display()}'."},
                                     status=status.HTTP_400_BAD_REQUEST)
 
+                today = date.today()
+                if booking.check_in < today:
+                    booking.status = BookingStatusOption.DECLINED
+                    booking.cancellation_reason = "System cancelled: Payment was not completed before the check-in date."
+                    booking.save()
+                    return Response(
+                        {"message": "Cannot initiate payment for a booking with a past check-in date."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
                 # --- Final Availability Check ---
                 listing = booking.listing
                 calendar_check_end_date = booking.check_out - timedelta(days=1)

@@ -96,6 +96,19 @@ class HostAcceptBookingRequestAPIView(views.APIView):
         except Booking.DoesNotExist:
             return Response({"message": "Pending booking request not found."}, status=status.HTTP_404_NOT_FOUND)
 
+        today = date.today()
+        if booking_to_accept.check_in < today:
+
+            booking_to_accept.status = BookingStatusOption.DECLINED
+            booking_to_accept.cancellation_reason = 'Declined by system: Request expired as check-in date has passed.'
+            booking_to_accept.save()
+
+            return Response(
+                {"message": "Cannot accept a booking request for a past check-in date. The request has been declined."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
         listing = booking_to_accept.listing
 
         # --- 1. FINAL AVAILABILITY CHECK ---
