@@ -538,7 +538,7 @@ class GuestBookingDataFilterProcess:
 
             if requests_to_decline_ids:
                 Booking.objects.filter(id__in=requests_to_decline_ids).update(
-                    status=BookingStatusOption.DECLINED,
+                    status=BookingStatusOption.INITIATED,
                     cancellation_reason="Declined by system: Dates became unavailable while request was pending."
                 )
 
