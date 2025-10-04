@@ -275,17 +275,37 @@ class CustomerSSLCommerzIPNView(views.APIView):
                     # Async tasks after commit
                     transaction.on_commit(lambda: booking_confirmed_process.delay(booking_id=booking.id))
 
+                    check_in_str = booking.check_in.strftime("%d %b %Y")
+                    check_out_str = booking.check_out.strftime("%d %b %Y")
+
+                    guest_sms = (
+                        f"🎉 Booking Confirmed!\n"
+                        f"Listing: {booking.listing.title}\n"
+                        f"Check-in: {check_in_str}, Check-out: {check_out_str}\n"
+                        f"Guests: {booking.guest_count}, Total Paid: {booking.paid_amount}\n"
+                        f"Invoice: {booking.invoice_no}, Code: {booking.reservation_code}"
+                    )
+
+                    host_sms = (
+                        f"📢 New Booking!\n"
+                        f"Listing: {booking.listing.title}\n"
+                        f"Check-in: {check_in_str}, Check-out: {check_out_str}\n"
+                        f"Guests: {booking.guest_count}, Paid: {booking.paid_amount}\n"
+                        f"Guest: {booking.guest.get_full_name()} ({booking.guest.phone_number})\n"
+                        f"Invoice: {booking.invoice_no}, Code: {booking.reservation_code}"
+                    )
+
                     # Notifications
                     guest_notification = create_notification(
                         event_type=NotificationEventTypeOption.BOOKING_CONFIRMED,
-                        data={"identifier": booking.invoice_no, "message": "Booking confirmed!", "link": f"/my-bookings/{booking.invoice_no}"},
+                        data={"identifier": booking.invoice_no, "message": guest_sms, "link": f"/my-bookings/{booking.invoice_no}"},
                         n_type=NotificationTypeOption.USER_NOTIFICATION,
                         user_id=booking.guest.id
                     )
 
                     host_notification = create_notification(
                         event_type=NotificationEventTypeOption.BOOKING_CONFIRMED,
-                        data={"identifier": booking.invoice_no, "message": f"New booking for your listing '{booking.listing.title}'", "link": f"/host-dashboard/bookings/{booking.invoice_no}"},
+                        data={"identifier": booking.invoice_no, "message": host_sms, "link": f"/host-dashboard/bookings/{booking.invoice_no}"},
                         n_type=NotificationTypeOption.USER_NOTIFICATION,
                         user_id=booking.host.id
                     )
@@ -293,9 +313,10 @@ class CustomerSSLCommerzIPNView(views.APIView):
                     notifications = [guest_notification, host_notification]
                     Notification.objects.bulk_create([Notification(**item) for item in notifications])
 
+
                     transaction.on_commit(lambda: send_notification(notification_data=notifications))
-                    transaction.on_commit(lambda: send_sms(username=booking.guest.phone_number, message=f"Booking confirmed! Invoice: {booking.invoice_no}"))
-                    transaction.on_commit(lambda: send_sms(username=host.phone_number, message=f"New booking received! Invoice: {booking.invoice_no}"))
+                    transaction.on_commit(lambda: send_sms(username=booking.guest.phone_number, message=guest_sms))
+                    transaction.on_commit(lambda: send_sms(username=host.phone_number, message=host_sms))
 
                 else:
                     online_payment.status = OnlinePaymentStatusOption.CANCELLED
