@@ -206,7 +206,9 @@ class UserChatApiView(views.APIView):
         # Admin notification
         admin_notification = create_notification(
             event_type=event_type,
-            data={"identifier": str(listing.unique_id), "message": f"A new inquiry has been initiated for '{listing.title}' between the hosting team and {guest_user.get_full_name()}", "link": f"/chat?id={room_id}"},
+            data={"identifier": str(listing.unique_id),
+                  "message": f"A new inquiry has been initiated for '{listing.title}' between the hosting team and {guest_user.get_full_name()}",
+                  "link": f"/chat?id={room_id}"},
             n_type=NotificationTypeOption.ADMIN_NOTIFICATION,
         )
         notification_data.append(admin_notification)

@@ -89,6 +89,9 @@ def identifier_builder(table_name: str, prefix: str = None) -> str:
         return seq_id.rjust(8, "0") + str(random_suffix)
     return prefix + seq_id.rjust(8, "0") + str(random_suffix)
 
+def identifier_builder_payment(prefix: str) -> str:
+    unique_part = str(uuid.uuid4()).replace('-', '')[:12].upper()
+    return f"{prefix}{unique_part}"
 
 def format_date(date: str) -> str:
     try:

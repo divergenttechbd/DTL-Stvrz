@@ -259,8 +259,6 @@ class AdminUserRetrieveUpdateAPIView(APIView):
     def get(self, request, *args, **kwargs):
         print(request.data)
         user = User.objects.get(id=kwargs.get("pk"), is_staff=False)
-        userx = User.objects.get(id=67)
-        print(userx)
         user_data = HostGuestUserSerializer(user).data
         user_data["profile"] = (
             UserProfileSerializer(

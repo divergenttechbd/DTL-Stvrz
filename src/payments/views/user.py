@@ -19,7 +19,7 @@ from accounts.serializers import UserSerializer
 
 from accounts.tasks.users import send_sms
 from base.helpers.decorators import exception_handler
-from base.helpers.utils import identifier_builder
+from base.helpers.utils import identifier_builder, identifier_builder_payment
 from base.type_choices import (
     BookingStatusOption,
     OnlinePaymentMethodOption,
@@ -118,7 +118,7 @@ class UserSSLCommerzOrderPaymentView(CreateAPIView):
                         'user': booking.guest,
                         'amount': booking.total_price,
                         'status': OnlinePaymentStatusOption.INITIATED,
-                        'transaction_number': identifier_builder(table_name="payments_onlinepayment", prefix="PGDBK"),
+                        'transaction_number': identifier_builder_payment(prefix="PGDBK"),
                     }
                 )
 
@@ -127,8 +127,7 @@ class UserSSLCommerzOrderPaymentView(CreateAPIView):
                         return Response({"message": "Payment has already been completed."},
                                         status=status.HTTP_400_BAD_REQUEST)
 
-                    online_payment.transaction_number = identifier_builder(table_name="payments_onlinepayment",
-                                                                           prefix="PGDBK")
+                    online_payment.transaction_number = identifier_builder_payment(prefix="PGDBK")
                     online_payment.status = OnlinePaymentStatusOption.INITIATED
                     online_payment.save()
 
@@ -192,187 +191,123 @@ class CustomerSSLCommerzIPNView(views.APIView):
 
 
     def post(self, request):
+        ipn_data = request.data
+        invoice_no = ipn_data.get("value_a")
+        tran_id = ipn_data.get("tran_id")
 
-        print("=== IPN VIEW HIT ===")
-        print("Request Headers:", request.headers)
-        print("Request Body:", request.body.decode('utf-8'))
+        if not invoice_no or not tran_id:
+            return Response({"message": "Invalid IPN data (missing tran_id or value_a)."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            if (
-                not request.data.get("tran_id")
-                or not request.data.get("value_a")
-                or not request.data.get("value_b")
-            ):
-                return Response(
-                    {"message": "Invalid request"}, status=status.HTTP_400_BAD_REQUEST
-                )
-            online_payment = OnlinePayment.objects.get(
-                transaction_number=request.data["tran_id"],
-                status=OnlinePaymentStatusOption.INITIATED,
-            )
-            online_payment.has_hit_ipn = True
-            booking = online_payment.booking
-
-            print(" --------------- ipn -------------------")
-            if not request.data.get("status") == "VALID":
-                online_payment.status = OnlinePaymentStatusOption.CANCELLED
-                online_payment.meta = self.request.data
-                online_payment.save()
-                return Response(
-                    {"message": "Payment is invalid"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            params = {
-                "val_id": request.data.get("val_id"),
-            }
-            response = sslcommerz_payment_validation(query_params=params)
-            if not response:
-                return Response(
-                    {"message": "No response from SSLCommerz validation API"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            online_payment.meta = {
-                "ipn_response": self.request.data,
-                "validation_response": response,
-            }
-
             with transaction.atomic():
-                if response.get("risk_level") == "0":
-                    online_payment.status = OnlinePaymentStatusOption.COMPLETED
+                # Lock booking and payment to prevent race conditions
+                try:
+                    booking = Booking.objects.select_for_update().get(invoice_no=invoice_no)
+                    online_payment = OnlinePayment.objects.select_for_update().get(booking=booking)
+                except Booking.DoesNotExist:
+                    return Response({"message": "Booking not found."}, status=status.HTTP_400_BAD_REQUEST)
+                except OnlinePayment.DoesNotExist:
+                    return Response({"message": "Payment record not found."}, status=status.HTTP_400_BAD_REQUEST)
 
+                # Already completed? Stop processing
+                if online_payment.status == OnlinePaymentStatusOption.COMPLETED:
+                    return Response({"message": "Payment already confirmed."}, status=status.HTTP_200_OK)
+
+                # Update meta
+                online_payment.has_hit_ipn = True
+                online_payment.pgw_transaction_number = tran_id
+                online_payment.meta = {"ipn_response": ipn_data}
+
+                # Check IPN status
+                if ipn_data.get("status") != "VALID":
+                    online_payment.status = OnlinePaymentStatusOption.CANCELLED
+                    online_payment.save()
+                    return Response({"message": "Payment is invalid."}, status=status.HTTP_200_OK)
+
+                # Validate via SSLCommerz API
+                validation_response = sslcommerz_payment_validation(query_params={"val_id": ipn_data.get("val_id")})
+                if not validation_response:
+                    online_payment.status = OnlinePaymentStatusOption.CANCELLED
+                    online_payment.meta['validation_response'] = "Validation API failed"
+                    online_payment.save()
+                    return Response({"message": "SSLCommerz validation failed."}, status=status.HTTP_200_OK)
+
+                online_payment.meta['validation_response'] = validation_response
+
+                # SUCCESS
+                if validation_response.get("risk_level") == "0":
+                    online_payment.status = OnlinePaymentStatusOption.COMPLETED
                     booking.guest_payment_status = PaymentStatusOption.PAID
                     booking.status = BookingStatusOption.CONFIRMED
                     booking.paid_amount = online_payment.amount
 
-                    Listing.objects.filter(id=booking.listing_id).update(
-                        total_booking_count=F("total_booking_count") + 1
-                    )
+                    # Update listing
+                    Listing.objects.filter(id=booking.listing.id).update(total_booking_count=F("total_booking_count") + 1)
 
-
-                    # ------
-                    event_type = NotificationEventTypeOption.BOOKING_CONFIRMED
-                    guest_notification = create_notification(
-                        event_type=event_type,
-                        data={
-                            "identifier": booking.invoice_no,
-                            "message": "Congratulations! You’ve successfully completed your booking.",
-                            # This link is crucial for mobile deep-linking
-                            "link": f"/my-bookings/{booking.invoice_no}",
-                        },
-                        n_type=NotificationTypeOption.USER_NOTIFICATION,
-                        user_id=booking.guest_id,
-                    )
-
-                    # 2. Create notification for the Host
-                    host_notification = create_notification(
-                        event_type=event_type,
-                        data={
-                            "identifier": booking.invoice_no,
-                            "message": ( f"📢 Great news! "
-                                            f"Your property '{booking.listing.title}' has just been booked "
-                                            f"from {booking.check_in} to {booking.check_out} "
-                                            f"({booking.night_count} nights, {booking.guest_count} guests)."
-                                        ),
-                            # This link takes the host to their dashboard
-                            "link": f"/host-dashboard/bookings/{booking.invoice_no}",
-                        },
-                        n_type=NotificationTypeOption.USER_NOTIFICATION,
-                        user_id=booking.host_id,
-                    )
-
-                    # This list will be used twice: once to save, once to send.
-                    notification_data = [guest_notification, host_notification]
-
-                    # 3. Save notifications to the DB within the transaction
-                    Notification.objects.bulk_create(
-                        [Notification(**item) for item in notification_data]
-                    )
-                    # =====
-
-
-
-                    booking_data = {
-                        "user": UserSerializer(
-                            booking.guest,
-                            fields=[
-                                "id",
-                                "full_name",
-                                "image",
-                                "u_type",
-                                "phone_number",
-                                "email",
-                            ],
-                        ).data,
-                        "booking": BookingSerializer(
-                            booking, fields=["id", "invoice_no", "reservation_code"]
-                        ).data,
+                    # Update calendar
+                    booking_data_snippet = {
+                        "user": UserSerializer(booking.guest, fields=["id", "full_name", "image", "phone_number"]).data,
+                        "booking": BookingSerializer(booking, fields=["id", "invoice_no", "reservation_code"]).data,
                     }
-
                     for entry in booking.calendar_info:
-                        start_date = entry["start_date"]
-                        end_date = entry["end_date"]
-
-                        defaults = {
-                            "base_price": entry["base_price"],
-                            "custom_price": entry["price"],
-                            "is_blocked": entry["is_blocked"],
-                            "is_booked": entry["is_booked"],
-                            "booking_data": booking_data,
-                        }
-
-                        obj, created = ListingCalendar.objects.update_or_create(
+                        ListingCalendar.objects.update_or_create(
                             listing_id=entry["listing_id"],
-                            start_date=start_date,
-                            end_date=end_date,
-                            defaults=defaults,
+                            start_date=entry["start_date"],
+                            end_date=entry["end_date"],
+                            defaults={
+                                "base_price": entry["base_price"],
+                                "custom_price": entry["price"],
+                                "is_blocked": True,
+                                "is_booked": True,
+                                "booking_data": booking_data_snippet,
+                            }
                         )
 
-                        # if not created:
-                        #     for key, value in defaults.items():
-                        #         setattr(obj, key, value)
-                        #     obj.save()
-
-                        entry["id"] = obj.id
-
-                    booking.save()
-
+                    # Update host
                     host = booking.host
-                    host.total_sell_amount = (
-                        host.total_sell_amount + booking.paid_amount
-                    )
-                    host.save()
+                    host.total_sell_amount = F("total_sell_amount") + booking.paid_amount
+                    host.save(update_fields=['total_sell_amount'])
+
+                    # Save changes
+                    booking.save()
                     online_payment.save()
 
-                send_notification(notification_data=notification_data)
+                    # Async tasks after commit
+                    transaction.on_commit(lambda: booking_confirmed_process.delay(booking_id=booking.id))
 
-                send_sms(
-                    username=booking.guest.phone_number,
-                    message=(
-                                f"🎉 Booking Confirmed! '{booking.listing.title}' "
-                                f"from {booking.check_in} to {booking.check_out}, "
-                                f"{booking.night_count} nights. Invoice: {booking.invoice_no}."
-                            ),
-                )
-                send_sms(
-                    username=host.phone_number,
-                    message=(
-                                f"📢 New Booking! '{booking.listing.title}' "
-                                f"from {booking.check_in} to {booking.check_out}, "
-                                f"{booking.guest_count} guests. Invoice: {booking.invoice_no}."
-                            ),
-                )
-                booking_confirmed_process.delay(booking_id=booking.id)
+                    # Notifications
+                    guest_notification = create_notification(
+                        event_type=NotificationEventTypeOption.BOOKING_CONFIRMED,
+                        data={"identifier": booking.invoice_no, "message": "Booking confirmed!", "link": f"/my-bookings/{booking.invoice_no}"},
+                        n_type=NotificationTypeOption.USER_NOTIFICATION,
+                        user_id=booking.guest.id
+                    )
 
-            return Response(
-                {"message": "Payment request received"}, status=status.HTTP_201_CREATED
-            )
-        except OnlinePayment.DoesNotExist:
-            return Response(
-                {"message": "Invalid payment attempted", "data": request.data},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+                    host_notification = create_notification(
+                        event_type=NotificationEventTypeOption.BOOKING_CONFIRMED,
+                        data={"identifier": booking.invoice_no, "message": f"New booking for your listing '{booking.listing.title}'", "link": f"/host-dashboard/bookings/{booking.invoice_no}"},
+                        n_type=NotificationTypeOption.USER_NOTIFICATION,
+                        user_id=booking.host.id
+                    )
+
+                    notifications = [guest_notification, host_notification]
+                    Notification.objects.bulk_create([Notification(**item) for item in notifications])
+
+                    transaction.on_commit(lambda: send_notification(notification_data=notifications))
+                    transaction.on_commit(lambda: send_sms(username=booking.guest.phone_number, message=f"Booking confirmed! Invoice: {booking.invoice_no}"))
+                    transaction.on_commit(lambda: send_sms(username=host.phone_number, message=f"New booking received! Invoice: {booking.invoice_no}"))
+
+                else:
+                    online_payment.status = OnlinePaymentStatusOption.CANCELLED
+                    online_payment.save()
+
+            return Response({"message": "IPN processed successfully."}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(f"CRITICAL IPN ERROR for Invoice {invoice_no}: {str(e)}")
+            return Response({"message": "An unexpected server error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 
 
 class PaymentRedirectAPIView(views.APIView):
