@@ -38,24 +38,24 @@ def send_notification(notification_data: list):
         )
 
         # print(" ----------- fcm -----------")
-        # if item.get("user_id"):
-        #     user_id = item.get("user_id")
-        #     title = "You have a new notification!"
-        #     body = item["data"]["message"]
-        #
-        #
-        #     payload_data = {
-        #         "url": item["data"].get("link", "/"),
-        #         "identifier": item["data"].get("identifier", "")
-        #     }
-        #
-        #     print(f"Dispatching FCM push task for user_id: {user_id}")
-        #     send_fcm_push_directly(
-        #         user_id=user_id,
-        #         title=title,
-        #         body=body,
-        #         data=payload_data
-        #     )
+        if item.get("user_id"):
+            user_id = item.get("user_id")
+            title = "You have a new notification!"
+            body = item["data"]["message"]
+
+
+            payload_data = {
+                "url": item["data"].get("link", "/"),
+                "identifier": item["data"].get("identifier", "")
+            }
+
+            print(f"Dispatching FCM push task for user_id: {user_id}")
+            send_fcm_push_directly(
+                user_id=user_id,
+                title=title,
+                body=body,
+                data=payload_data
+            )
 
 
 def create_notification(
