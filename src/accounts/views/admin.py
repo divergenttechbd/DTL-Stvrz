@@ -525,7 +525,7 @@ class AdminBestSellingHostListAPIView(APIView):
 
         # --- CHANGE 3: Build a separate filter for bookings ---
         # This will be used inside the annotation.
-        booking_filter = Q(host_bookings__status=BookingStatusOption.CONFIRMED)
+        booking_filter = Q()
         try:
             if start_date_str:
                 start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
