@@ -430,9 +430,9 @@ class AdminReferrerReportListView(generics.ListAPIView):
         successful_statuses = [ReferralStatus.SIGNED_UP, ReferralStatus.HOST_ACTIVE, ReferralStatus.COMPLETED]
 
         # --- Annotations for Host Referrals ---
-        host_ref_made_count = Count('referrals_made', filter=Q(referrals_made__referral_type=ReferralType.HOST_TO_HOST))
+        host_ref_made_count = Count('referrals_made', filter=Q(referrals_made__referral_type=ReferralType.HOST_TO_HOST), distinct=True)
 
-        host_successful_ref_count = Count('referrals_made', filter=Q(
+        host_successful_ref_count = Count('referrals_made', distinct=True, filter=Q(
             referrals_made__referral_type=ReferralType.HOST_TO_HOST,
             referrals_made__status__in=successful_statuses
         ))
@@ -448,9 +448,9 @@ class AdminReferrerReportListView(generics.ListAPIView):
 
         # --- Annotations for Guest Referrals ---
         guest_ref_made_count = Count('referrals_made',
-                                     filter=Q(referrals_made__referral_type=ReferralType.GUEST_TO_GUEST))
+                                     filter=Q(referrals_made__referral_type=ReferralType.GUEST_TO_GUEST), distinct=True)
 
-        guest_successful_ref_count = Count('referrals_made', filter=Q(
+        guest_successful_ref_count = Count('referrals_made', distinct=True, filter=Q(
             referrals_made__referral_type=ReferralType.GUEST_TO_GUEST,
             referrals_made__status__in=successful_statuses
         ))
