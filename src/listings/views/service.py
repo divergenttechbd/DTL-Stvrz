@@ -132,28 +132,41 @@ class ListingCalendarDataProcess:
 
 
 class ListingCalendarDataProcessPublic:
-    def __call__(self, data: dict, listing_id: int) -> dict:  # Changed listing_id to int
+    def __call__(self, data: dict, listing_id: int) -> dict:
         from_date = data.get("from_date")
         to_date = data.get("to_date")
 
-        # 1. Fetch the main Listing object to get its default price
         try:
             listing = Listing.objects.get(id=listing_id)
         except Listing.DoesNotExist:
-            return {}  # Or raise an error
+            return {}
 
-        # 2. Fetch all potentially relevant calendar "rules" for this listing
-        # Order by creation date descending to prioritize newer rules
-        calendar_rules = list(
+        # --- THE FIX: Separate the queries for bounded and unbounded rules ---
+
+        # 1. Fetch all specific, BOUNDED rules that overlap with our date range.
+        # Order by most recent so if two bounded rules overlap, the newer one wins.
+        bounded_rules = list(
             ListingCalendar.objects.filter(
-                Q(listing_id=listing_id),
-                # A rule applies if it has no end date (unbounded) OR it overlaps with our query range
-                Q(end_date__isnull=True) | Q(start_date__lte=to_date, end_date__gte=from_date)
-            ).order_by('-created_at').values(  # Use created_at to break ties
+                listing_id=listing_id,
+                start_date__lte=to_date,
+                end_date__gte=from_date,
+                end_date__isnull=False  # Explicitly get only bounded rules
+            ).order_by('-created_at').values(
                 "id", "start_date", "end_date", "custom_price",
                 "is_blocked", "is_booked", "booking_data", "note"
             )
         )
+
+        # 2. Fetch the SINGLE most recent UNBOUNDED (default price) rule.
+        unbounded_rule = ListingCalendar.objects.filter(
+            listing_id=listing_id,
+            end_date__isnull=True
+        ).order_by('-created_at').values(
+            "id", "start_date", "end_date", "custom_price",
+            "is_blocked", "is_booked", "booking_data", "note"
+        ).first()  # Use .first() to get only one
+
+        # --- END OF FIX ---
 
         formatted_data = {}
 
@@ -162,19 +175,20 @@ class ListingCalendarDataProcessPublic:
             date_str = str(date_obj)
             applicable_rule = None
 
-            # 4. Find the most specific (latest created) rule that applies to this day
-            for rule in calendar_rules:
-                rule_start = rule["start_date"]
-                # If a rule has no end date, it applies indefinitely into the future
-                rule_end = rule["end_date"] if rule["end_date"] is not None else date.max
-
-                if rule_start <= date_obj <= rule_end:
+            # 4. Phase 1: Check against specific, bounded rules first.
+            for rule in bounded_rules:
+                if rule["start_date"] <= date_obj <= rule["end_date"]:
                     applicable_rule = rule
-                    break  # Stop after finding the first (most specific) rule
+                    break  # Found the most specific rule, stop looking
 
-            # 5. Build the data for the day based on what was found
+            # 5. Phase 2: If no bounded rule was found, check the general unbounded rule.
+            if not applicable_rule and unbounded_rule:
+                if unbounded_rule["start_date"] <= date_obj:
+                    applicable_rule = unbounded_rule
+
+            # 6. Build the data for the day
             if applicable_rule:
-                # If a specific rule was found, use its data
+                # A rule (either bounded or unbounded) was found
                 formatted_data[date_str] = {
                     "id": applicable_rule["id"],
                     "price": applicable_rule["custom_price"],
@@ -184,9 +198,9 @@ class ListingCalendarDataProcessPublic:
                     "note": applicable_rule["note"],
                 }
             else:
-                # If no specific rule was found, use the listing's default price and availability
+                # If no rules were found at all, fall back to the listing's master price
                 formatted_data[date_str] = {
-                    "id": None,  # No specific calendar entry ID
+                    "id": None,
                     "price": listing.price,
                     "is_blocked": False,
                     "is_booked": False,
