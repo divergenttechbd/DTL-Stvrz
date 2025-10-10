@@ -21,7 +21,8 @@ from listings.models import Amenity, Category, Listing
 
 from listings.serializers import ListingSerializer, ListingAmenitySerializer, ListingSerializerM
 from listings.utils import get_user_with_profile
-from listings.views.service import ListingCalendarDataProcess, ListingCheckoutCalculate
+from listings.views.service import ListingCalendarDataProcess, ListingCheckoutCalculate, \
+    ListingCalendarDataProcessPublic
 from myproject import settings
 
 NEW_PROPERTY_BOOST = getattr(settings, 'NEW_PROPERTY_BOOST_SCORE', 100)
@@ -458,7 +459,7 @@ class PublicListingRetrieveAPIView(RetrieveAPIView):
         calendar_start_date = date.today()
         calendar_end_date = calendar_start_date + timedelta(weeks=53)
 
-        calendar_data = ListingCalendarDataProcess()(
+        calendar_data = ListingCalendarDataProcessPublic()(
             {
                 "from_date": calendar_start_date,
                 "to_date": calendar_end_date,

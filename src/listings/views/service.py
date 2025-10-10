@@ -1,6 +1,6 @@
 from typing import Any
 from django.db.models import Q
-from datetime import datetime
+from datetime import datetime, date
 from base.helpers.utils import calculate_days_between_dates, date_range
 from configurations.models import ServiceCharge
 from listings.models import Listing, ListingAmenity, ListingCalendar
@@ -130,6 +130,71 @@ class ListingCalendarDataProcess:
         formatted_data = dict(formatted_data)
         return formatted_data
 
+
+class ListingCalendarDataProcessPublic:
+    def __call__(self, data: dict, listing_id: int) -> dict:  # Changed listing_id to int
+        from_date = data.get("from_date")
+        to_date = data.get("to_date")
+
+        # 1. Fetch the main Listing object to get its default price
+        try:
+            listing = Listing.objects.get(id=listing_id)
+        except Listing.DoesNotExist:
+            return {}  # Or raise an error
+
+        # 2. Fetch all potentially relevant calendar "rules" for this listing
+        # Order by creation date descending to prioritize newer rules
+        calendar_rules = list(
+            ListingCalendar.objects.filter(
+                Q(listing_id=listing_id),
+                # A rule applies if it has no end date (unbounded) OR it overlaps with our query range
+                Q(end_date__isnull=True) | Q(start_date__lte=to_date, end_date__gte=from_date)
+            ).order_by('-created_at').values(  # Use created_at to break ties
+                "id", "start_date", "end_date", "custom_price",
+                "is_blocked", "is_booked", "booking_data", "note"
+            )
+        )
+
+        formatted_data = {}
+
+        # 3. Iterate through every day in the requested date range
+        for date_obj in date_range(from_date, to_date):
+            date_str = str(date_obj)
+            applicable_rule = None
+
+            # 4. Find the most specific (latest created) rule that applies to this day
+            for rule in calendar_rules:
+                rule_start = rule["start_date"]
+                # If a rule has no end date, it applies indefinitely into the future
+                rule_end = rule["end_date"] if rule["end_date"] is not None else date.max
+
+                if rule_start <= date_obj <= rule_end:
+                    applicable_rule = rule
+                    break  # Stop after finding the first (most specific) rule
+
+            # 5. Build the data for the day based on what was found
+            if applicable_rule:
+                # If a specific rule was found, use its data
+                formatted_data[date_str] = {
+                    "id": applicable_rule["id"],
+                    "price": applicable_rule["custom_price"],
+                    "is_blocked": applicable_rule["is_blocked"],
+                    "is_booked": applicable_rule["is_booked"],
+                    "booking_data": applicable_rule["booking_data"],
+                    "note": applicable_rule["note"],
+                }
+            else:
+                # If no specific rule was found, use the listing's default price and availability
+                formatted_data[date_str] = {
+                    "id": None,  # No specific calendar entry ID
+                    "price": listing.price,
+                    "is_blocked": False,
+                    "is_booked": False,
+                    "booking_data": {},
+                    "note": None,
+                }
+
+        return formatted_data
 
 class ListingCheckoutCalculate:
     def __call__(
