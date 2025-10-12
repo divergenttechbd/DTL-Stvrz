@@ -136,10 +136,14 @@ class UserChatApiView(views.APIView):
                 "m_type": "system",
                 "is_read": False,
                 "content": f"Inquiry sent · {booking_data['total_guest_count']} guest, {format_date(booking_data['check_in'])} - {format_date(booking_data['check_out'])}",
-                "meta": {"listing": str(listing.unique_id), "booking": {"booking_date": booking_data, "checkout_data": checkout_data}, "user": request.user.id},
+                "meta": {"listing": str(listing.unique_id),
+                         "booking": {"booking_date": booking_data, "checkout_data": checkout_data}, "user": request.user.id},
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
             })
+
+            print(" ----- ", booking_data)
+            print(" ===== ", checkout_data)
 
             # Insert user's actual message
             collections["Message"].insert_one({

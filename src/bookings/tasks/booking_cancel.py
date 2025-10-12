@@ -59,7 +59,7 @@ def booking_cancelled_process(booking_id: str) -> None:
         else:
             chat_room_id = chat_room["_id"]
             chat_room_id_str = str(chat_room_id)
-            content = "This booking was successfully cancelled."
+            content = f"This booking {listing.title} was successfully cancelled."
 
             # Insert the system message
             collections["Message"].insert_one({

@@ -5,7 +5,8 @@ from django.db.models import Q
 from django.contrib.auth import get_user_model
 from accounts.serializers import UserSerializer
 from accounts.tasks.users import send_sms
-from base.helpers.utils import identifier_builder
+from base.helpers.utils import identifier_builder, format_date
+from base.mongo.connection import connect_mongo
 from base.type_choices import BookingStatusOption, UserTypeOption, ListingStatusOption, NotificationEventTypeOption, \
     NotificationTypeOption
 from bookings.models import Booking, ListingBookingReview
@@ -29,7 +30,7 @@ from listings.views.service import ListingCalendarDataProcess, ListingCheckoutCa
 # Assuming coupon_service.py is in the same app 'bookings'
 from bookings.coupon_service import validate_and_get_coupon_discount_info
 from django.utils import timezone
-
+from bson import DBRef
 
 User = get_user_model()
 
@@ -37,6 +38,146 @@ User = get_user_model()
 GUEST_GOOD_TRACK_RECORD_MIN_RATING = Decimal('5')
 
 class GuestBookingProcess:
+
+    def _send_booking_request_chat_message(self, guest_user: User, listing: Listing, all_recipients: list,
+                                           request_data: dict, checkout_data: dict):
+        """
+        Finds or creates a chat room and sends a system message indicating a new booking request.
+        """
+        try:
+            # 1. Get all host usernames and sort them to create a deterministic, canonical room name
+            host_usernames = sorted([user.username for user in all_recipients])
+            room_name = f"{guest_user.username}:{':'.join(host_usernames)}"
+
+            print(f"Attempting to send chat message for booking request to room: {room_name}")
+
+            def convert_decimals_to_floats(data):
+                if isinstance(data, dict):
+                    return {k: convert_decimals_to_floats(v) for k, v in data.items()}
+                if isinstance(data, list):
+                    return [convert_decimals_to_floats(i) for i in data]
+                if isinstance(data, Decimal):
+                    return float(data)
+                return data
+
+            total_guest_count = (
+                int(request_data.get("adult_count", 1)) +
+                int(request_data.get("children_count", 0)) +
+                int(request_data.get("infant_count", 0))
+            )
+
+            meta_payload = {
+                "instant_book": True,
+                "instant_book_status":"pending",
+                "listing": str(listing.unique_id),
+                "booking": {
+                    "booking_date": {
+                        "check_in": request_data.get("check_in"),
+                        "check_out": request_data.get("check_out"),
+                        "adult": int(request_data.get("adult_count", 1)),
+                        "children": int(request_data.get("children_count", 0)),
+                        "infant": int(request_data.get("infant_count", 0)),
+                        "pets": 0,
+                        "total_guest_count": total_guest_count
+                    },
+                    "checkout_data": convert_decimals_to_floats(checkout_data)  # Use the rich checkout data
+                },
+                "user": guest_user.id
+            }
+
+            print(" meta ", meta_payload)
+
+            booking_date_meta = {"check_in": request_data.get("check_in"), "check_out": request_data.get("check_out"),
+                                 "adult": int(request_data.get("adult_count", 1)),
+                                 "children": int(request_data.get("children_count", 0)),
+                                 "infant": int(request_data.get("infant_count", 0)),
+                                 "total_guest_count": total_guest_count}
+
+            booking_data_for_room = meta_payload['booking']['booking_date']
+            # 2. Connect to MongoDB and find the necessary user documents
+            with connect_mongo() as collections:
+                mongo_guest_user_doc = collections["User"].find_one({"username": guest_user.username})
+                mongo_host_user_docs = list(collections["User"].find({"username": {"$in": host_usernames}}))
+
+                if not mongo_guest_user_doc or len(mongo_host_user_docs) != len(all_recipients):
+                    print(f"Chat Error: One or more users not found in chat service for room '{room_name}'. Skipping.")
+                    return
+
+                # 3. Find an existing chat room or create a new one
+                chat_room_doc = collections["ChatRoom"].find_one({"name": room_name})
+                if chat_room_doc:
+                    room_id = chat_room_doc["_id"]
+                else:
+                    created_room = collections["ChatRoom"].insert_one({
+                        "name": room_name,
+                        "from_user": DBRef("User", mongo_guest_user_doc["_id"]),
+                        "to_user": [DBRef("User", doc["_id"]) for doc in mongo_host_user_docs],
+                        "created_at": datetime.now(),
+                        "status": "open",
+                    })
+                    room_id = created_room.inserted_id
+
+                # 4. Create the content for the system message
+                message_content = (
+                    f"Booking Request Sent · {total_guest_count} guest(s), "
+                    f"{format_date(request_data.get('check_in'))} - {format_date(request_data.get('check_out'))}"
+                )
+
+                # 5. Insert the new system message
+                collections["Message"].insert_one({
+                    "chat_room": DBRef("ChatRoom", room_id),
+                    "user": DBRef("User", mongo_guest_user_doc["_id"]),
+                    "m_type": "system",
+                    "is_read": False,
+                    "content": message_content,
+                    "meta": meta_payload,
+                    "created_at": datetime.now(),
+                    "updated_at": datetime.now(),
+                })
+
+                price_details = checkout_data
+                details_message_content = (
+                    f"I have sent a request to book your place.\n\n"
+                    f"Title: {listing.title}\n"
+                    f" - Check-in: {booking_date_meta['check_in']}\n"
+                    f" - Check-out: {booking_date_meta['check_out']}\n"
+                    f" - Guests: {booking_date_meta['total_guest_count']}\n"
+                    f" - Total Price: {float(price_details.get('total_price', 0.0)):,.2f}"
+                )
+
+                collections["Message"].insert_one({
+                    "chat_room": DBRef("ChatRoom", room_id), "user": DBRef("User", mongo_guest_user_doc["_id"]),
+                    "content": details_message_content, "meta": None, "m_type": "normal",
+                    "is_read": False, "created_at": datetime.now(), "updated_at": datetime.now(),
+                })
+
+                # 6. Update the ChatRoom's latest message to reflect this new activity
+                collections["ChatRoom"].update_one(
+                    {"_id": room_id},
+                    {"$set": {
+                        "latest_message": {
+                            "content": "I have sent a request to book your place.",
+                            "created_at": datetime.now(),
+                            "user": {
+                                "username": mongo_guest_user_doc["username"],
+                                "full_name": mongo_guest_user_doc["full_name"],
+                                "image": mongo_guest_user_doc["image"],
+                                "user_id": mongo_guest_user_doc["user_id"]
+                            },
+                            "m_type": "normal",
+                            "is_read": False,
+                        },
+                        "status": "inquiry",  # A new status to identify these rooms
+                        "booking_data": booking_data_for_room,
+                        "listing": {"name": listing.title, "id": listing.id},
+                        "updated_at": datetime.now(),
+                    }}
+                )
+                print(f"Successfully sent booking request chat message to room_id: {room_id}")
+
+        except Exception as e:
+            # Log the error but do not let it crash the main booking process
+            print(f"CRITICAL: Failed to send booking request chat message. Error: {e}")
 
     def _get_applicable_length_of_stay_discount_percent(self, listing: Listing, num_nights: int) -> Decimal:
         if not listing.enable_length_of_stay_discount or not listing.length_of_stay_discounts or num_nights == 0:
@@ -196,6 +337,10 @@ class GuestBookingProcess:
         else:
             initial_status = BookingStatusOption.PENDING_CONFIRMATION
             response_message = "Booking request sent to host. You will be notified upon confirmation."
+            primary_host = listing_obj.host
+            active_co_host = User.objects.filter(cohosting_gigs__listing=listing_obj,cohosting_gigs__is_active=True )
+
+            all_recipients = list(set([primary_host] + list(active_co_host)))
             host_noti = create_notification(
                 event_type=NotificationEventTypeOption.BOOKING_REQUEST_CONF,
                 data={
@@ -210,11 +355,25 @@ class GuestBookingProcess:
             notification_data = [host_noti]
             send_notification(notification_data=notification_data)
 
-            if listing_obj.host.phone_number:
-                send_sms(
-                    username=listing_obj.host.phone_number,
-                    message=f"You have a new booking request for '{listing_obj.title}'. Please review and confirm. "
-                )
+            # if listing_obj.host.phone_number:
+            #     send_sms(
+            #         username=listing_obj.host.phone_number,
+            #         message=f"You have a new booking request for '{listing_obj.title}'. Please review and confirm. "
+            #     )
+            guest_count = int(request_data.get("children_count", 0)) + int(request_data.get("adult_count", 1))
+            booking_details_for_chat = {
+                "check_in": from_date_str,
+                "check_out": to_date_str,
+                "guest_count": guest_count
+            }
+            self._send_booking_request_chat_message(
+                guest_user=user,
+                listing=listing_obj,
+                all_recipients=all_recipients,
+                # booking_details=booking_details_for_chat,
+                request_data = request_data,
+                checkout_data = checkout_data_after_los
+            )
 
 
 

@@ -460,11 +460,18 @@ class AdminDashboardStatAPIView(APIView):
             or 0
         )
 
+        total_used_coupon_count = Booking.objects.filter(
+            **filter_params,
+            applied_admin_coupon__isnull=False,
+            status__in=[BookingStatusOption.CONFIRMED, BookingStatusOption.CANCELLED]
+        ).count()
+
         result = {
             "success_booking_count": success_booking_count,
             "cancelled_booking_count": cancelled_booking_count,
             "total_profit": total_profit,
             "user_count": user_count,
+            "total_used_coupon_count": total_used_coupon_count,
         }
         return Response({"data": result}, status=status.HTTP_200_OK)
 
