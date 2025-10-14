@@ -142,7 +142,6 @@ class GuestBookingProcess:
                     f" - Check-in: {booking_date_meta['check_in']}\n"
                     f" - Check-out: {booking_date_meta['check_out']}\n"
                     f" - Guests: {booking_date_meta['total_guest_count']}\n"
-                    f" - Total Price: {float(price_details.get('total_price', 0.0)):,.2f}"
                 )
 
                 collections["Message"].insert_one({
