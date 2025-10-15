@@ -135,16 +135,15 @@ class ListingCalendarDataProcessCal:
         from_date = data.get("from_date")
         to_date = data.get("to_date")
 
-        # 1. Fetch the listing's base price to use as a default.
+        # 1. Fetch the listing's base price
         try:
             listing = Listing.objects.get(id=listing_id)
             base_price = listing.price
         except Listing.DoesNotExist:
             return {}
 
-        # 2. Fetch all potentially relevant rules.
-        # Separate ongoing rules from specific date rules
-        listings = list(
+        # 2. Fetch all rules
+        all_rules = list(
             ListingCalendar.objects.filter(
                 Q(end_date__isnull=True) |
                 Q(start_date__lte=to_date, end_date__gte=from_date),
@@ -158,51 +157,61 @@ class ListingCalendarDataProcessCal:
                 "is_booked",
                 "booking_data",
                 "note",
+                "created_at",
             )
         )
 
-        # Separate into ongoing and specific rules
-        ongoing_rules = [r for r in listings if r["end_date"] is None]
-        specific_rules = [r for r in listings if r["end_date"] is not None]
+        # Separate specific rules from ongoing rules
+        specific_rules = [r for r in all_rules if r["end_date"] is not None]
+        ongoing_rules = [r for r in all_rules if r["end_date"] is None]
+
+        # Sort ongoing rules by start_date (newest start_date first, then by created_at)
+        ongoing_rules.sort(key=lambda x: (x["start_date"], x["created_at"]), reverse=True)
 
         formatted_data = {}
 
-        # 3. Iterate through each day in the requested range.
+        # 3. Process each date
         for date_obj in date_range(from_date, to_date):
             date_str = str(date_obj)
-
             found_rule = False
 
-            # First, check for specific date rules (higher priority)
-            for item in specific_rules:
-                if item["start_date"] <= date_obj <= item["end_date"]:
+            # Priority 1: Check specific date rules (most recent first)
+            for rule in specific_rules:
+                if rule["start_date"] <= date_obj <= rule["end_date"]:
                     formatted_data[date_str] = {
-                        "id": item["id"],
-                        "price": item["custom_price"],
-                        "is_blocked": item["is_blocked"],
-                        "is_booked": item["is_booked"],
-                        "booking_data": item["booking_data"],
-                        "note": item["note"],
+                        "id": rule["id"],
+                        "price": rule["custom_price"],
+                        "is_blocked": rule["is_blocked"],
+                        "is_booked": rule["is_booked"],
+                        "booking_data": rule["booking_data"],
+                        "note": rule["note"],
                     }
                     found_rule = True
                     break
 
-            # If no specific rule found, check ongoing rules
+            # Priority 2: Check ongoing rules
             if not found_rule:
-                for item in ongoing_rules:
-                    if date_obj >= item["start_date"]:
-                        formatted_data[date_str] = {
-                            "id": item["id"],
-                            "price": item["custom_price"],
-                            "is_blocked": item["is_blocked"],
-                            "is_booked": item["is_booked"],
-                            "booking_data": item["booking_data"],
-                            "note": item["note"],
-                        }
-                        found_rule = True
-                        break
+                # Find the most recent ongoing rule that applies to this date
+                # (where start_date <= date_obj)
+                applicable_ongoing = [
+                    r for r in ongoing_rules
+                    if r["start_date"] <= date_obj
+                ]
 
-            # If still no rule found, use base price
+                if applicable_ongoing:
+                    # Get the one with the latest start_date (and if tied, latest created_at)
+                    rule = applicable_ongoing[0]  # Already sorted correctly
+                    formatted_data[date_str] = {
+                        "id": rule["id"],
+                        "price": rule["custom_price"],
+                        "is_blocked": rule["is_blocked"],
+                        "is_booked": rule["is_booked"],
+                        "booking_data": rule["booking_data"],
+                        "note": rule["note"],
+                    }
+                    found_rule = True
+
+            # Priority 3: Use base price as fallback
             if not found_rule:
                 formatted_data[date_str] = {
                     "id": None,
