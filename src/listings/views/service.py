@@ -135,10 +135,19 @@ class ListingCalendarDataProcessCal:
         from_date = data.get("from_date")
         to_date = data.get("to_date")
 
-        # 1. Get all relevant rules, with the NEWEST ones FIRST.
+        # 1. Fetch the listing's base price to use as a default.
+        try:
+            listing = Listing.objects.get(id=listing_id)
+            base_price = listing.price
+        except Listing.DoesNotExist:
+            return {}  # Or raise an exception if the listing is not found
+
+        # 2. Fetch all potentially relevant rules, sorted with the newest first.
         listings = list(
             ListingCalendar.objects.filter(
-                Q(end_date__isnull=True) | Q(start_date__lte=to_date, end_date__gte=from_date),
+                # This logic is correct: get ongoing rules OR overlapping rules
+                Q(end_date__isnull=True) |
+                Q(start_date__lte=to_date, end_date__gte=from_date),
                 listing_id=listing_id,
             ).order_by('-created_at').values(
                 "id",
@@ -154,36 +163,27 @@ class ListingCalendarDataProcessCal:
 
         formatted_data = {}
 
-        # If there are no rules, you may want to handle it (e.g., use listing base price)
-        if not listings:
-            # This part is optional but good practice
-            # listing = Listing.objects.get(id=listing_id)
-            # base_price = listing.price
-            # for date_obj in date_range(from_date, to_date):
-            #     formatted_data[str(date_obj)] = {"price": base_price, ...}
-            return formatted_data
-
-        # 2. Iterate over each day you need to generate data for.
+        # 3. Iterate through each day in the requested range.
         for date_obj in date_range(from_date, to_date):
             date_str = str(date_obj)
 
-            # 3. Find the FIRST matching rule for that day.
-            # Since the list is sorted by newest first, this will be the correct one.
+            found_applicable_rule = False
+
+            # Find the first (and therefore newest) rule that applies to this day
             for item in listings:
                 start_date = item["start_date"]
                 end_date = item["end_date"]
 
-                # Check if the current day falls within the rule's date range
                 rule_applies = False
+                # Check if it's an ongoing rule that has already started
                 if end_date is None and date_obj >= start_date:
-                    # This is a rule with no end date (e.g., "price is 10 from now on")
                     rule_applies = True
+                # Check if it's a date-range rule that includes the current day
                 elif end_date is not None and start_date <= date_obj <= end_date:
-                    # This is a rule for a specific date range
                     rule_applies = True
 
                 if rule_applies:
-                    # Found the newest rule that applies. Use it.
+                    # Apply the data from the newest matching rule
                     formatted_data[date_str] = {
                         "id": item["id"],
                         "price": item["custom_price"],
@@ -192,8 +192,20 @@ class ListingCalendarDataProcessCal:
                         "booking_data": item["booking_data"],
                         "note": item["note"],
                     }
-                    # 4. IMPORTANT: Stop searching for this day and move to the next.
+                    found_applicable_rule = True
+                    # Once the correct rule is found, stop and move to the next day
                     break
+
+            # 4. If no rule was found for this day, use the listing's base price.
+            if not found_applicable_rule:
+                formatted_data[date_str] = {
+                    "id": None,
+                    "price": base_price,
+                    "is_blocked": False,
+                    "is_booked": False,
+                    "booking_data": None,
+                    "note": None,
+                }
 
         return formatted_data
 
