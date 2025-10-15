@@ -140,12 +140,12 @@ class ListingCalendarDataProcessCal:
             listing = Listing.objects.get(id=listing_id)
             base_price = listing.price
         except Listing.DoesNotExist:
-            return {}  # Or raise an exception if the listing is not found
+            return {}
 
-        # 2. Fetch all potentially relevant rules, sorted with the newest first.
+        # 2. Fetch all potentially relevant rules.
+        # Separate ongoing rules from specific date rules
         listings = list(
             ListingCalendar.objects.filter(
-                # This logic is correct: get ongoing rules OR overlapping rules
                 Q(end_date__isnull=True) |
                 Q(start_date__lte=to_date, end_date__gte=from_date),
                 listing_id=listing_id,
@@ -161,29 +161,21 @@ class ListingCalendarDataProcessCal:
             )
         )
 
+        # Separate into ongoing and specific rules
+        ongoing_rules = [r for r in listings if r["end_date"] is None]
+        specific_rules = [r for r in listings if r["end_date"] is not None]
+
         formatted_data = {}
 
         # 3. Iterate through each day in the requested range.
         for date_obj in date_range(from_date, to_date):
             date_str = str(date_obj)
 
-            found_applicable_rule = False
+            found_rule = False
 
-            # Find the first (and therefore newest) rule that applies to this day
-            for item in listings:
-                start_date = item["start_date"]
-                end_date = item["end_date"]
-
-                rule_applies = False
-                # Check if it's an ongoing rule that has already started
-                if end_date is None and date_obj >= start_date:
-                    rule_applies = True
-                # Check if it's a date-range rule that includes the current day
-                elif end_date is not None and start_date <= date_obj <= end_date:
-                    rule_applies = True
-
-                if rule_applies:
-                    # Apply the data from the newest matching rule
+            # First, check for specific date rules (higher priority)
+            for item in specific_rules:
+                if item["start_date"] <= date_obj <= item["end_date"]:
                     formatted_data[date_str] = {
                         "id": item["id"],
                         "price": item["custom_price"],
@@ -192,12 +184,26 @@ class ListingCalendarDataProcessCal:
                         "booking_data": item["booking_data"],
                         "note": item["note"],
                     }
-                    found_applicable_rule = True
-                    # Once the correct rule is found, stop and move to the next day
+                    found_rule = True
                     break
 
-            # 4. If no rule was found for this day, use the listing's base price.
-            if not found_applicable_rule:
+            # If no specific rule found, check ongoing rules
+            if not found_rule:
+                for item in ongoing_rules:
+                    if date_obj >= item["start_date"]:
+                        formatted_data[date_str] = {
+                            "id": item["id"],
+                            "price": item["custom_price"],
+                            "is_blocked": item["is_blocked"],
+                            "is_booked": item["is_booked"],
+                            "booking_data": item["booking_data"],
+                            "note": item["note"],
+                        }
+                        found_rule = True
+                        break
+
+            # If still no rule found, use base price
+            if not found_rule:
                 formatted_data[date_str] = {
                     "id": None,
                     "price": base_price,
