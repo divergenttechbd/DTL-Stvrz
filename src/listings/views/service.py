@@ -130,6 +130,81 @@ class ListingCalendarDataProcess:
         formatted_data = dict(formatted_data)
         return formatted_data
 
+class ListingCalendarDataProcessCal:
+    def __call__(self, data: dict, listing_id: str) -> dict:
+        from_date = data.get("from_date")
+        to_date = data.get("to_date")
+
+        listings = list(
+            ListingCalendar.objects.filter(
+                Q(end_date__isnull=True)
+                | Q(start_date__lte=to_date, end_date__gte=from_date),
+                listing_id=listing_id,
+            ).order_by('-created_at').values(
+                "id",
+                "start_date",
+                "end_date",
+                "custom_price",
+                "is_blocked",
+                "is_booked",
+                "booking_data",
+                "note",
+            )
+        )
+
+        new_data = [entry for entry in listings if entry["end_date"] is not None]
+        null_data = [entry for entry in listings if entry["end_date"] is None]
+        listings = null_data + new_data
+        formatted_data = {}
+
+        # if not listings:
+        #     for date_obj in date_range(from_date, to_date):
+        #         date_str = str(date_obj)
+        #         formatted_data[date_str] = {
+        #             "id": None,
+        #             "price": listing.price,
+        #             "is_blocked": False,
+        #             "is_booked": False,
+        #             "booking_data": None,
+        #             "note": None,
+        #         }
+        #     return formatted_data
+
+
+        print("listing ----------- ", listings)
+        for date_obj in date_range(from_date, to_date):
+            date_str = str(date_obj)
+            formatted_data[date_str] = {
+                "id": listings[0]["id"],
+                "price": listings[0]["custom_price"],
+                "is_blocked": False,
+                "is_booked": False,
+            }
+
+            for item in listings:
+                start_date = item["start_date"]
+                end_date = item["end_date"]
+                price = item["custom_price"]
+                is_blocked = item["is_blocked"]
+                is_booked = item["is_booked"]
+                listing_calendar_id = item["id"]
+                booking_data = item["booking_data"]
+                date_range_end = end_date if end_date is not None else to_date
+                if date_obj in date_range(
+                    start_date, date_range_end
+                ):  # date_obj >= start_date and  date_obj <= date_range_end
+                    formatted_data[date_str] = {
+                        "id": listing_calendar_id,
+                        "price": price,
+                        "is_blocked": is_blocked,
+                        "is_booked": is_booked,
+                        "booking_data": booking_data,
+                        "note": item["note"],
+                    }
+
+        formatted_data = dict(formatted_data)
+        return formatted_data
+
 
 class ListingCalendarDataProcessPublic:
     def __call__(self, data: dict, listing_id: int) -> dict:
