@@ -38,7 +38,8 @@ from listings.serializers import (
     BasicListingInfoWithPriceSerializer, ListingCoHostDetailForPrimaryHostSerializer, CoHostedListingDetailSerializer,
     UpdateCoHostAssignmentSerializer, PrimaryHostAssignmentViewSerializer,
 )
-from listings.views.service import ListingCalendarDataProcess, ListingCreateDataProcess
+from listings.views.service import ListingCalendarDataProcess, ListingCreateDataProcess, \
+    ListingCalendarDataProcessPublic
 
 User = get_user_model()
 
@@ -282,7 +283,7 @@ class HostListingCalendarApiView(views.APIView):
                     request.GET.get("to_date"), "%Y-%m-%d"
                 ).date(),
             }
-            calendar_data = ListingCalendarDataProcess()(query_data, listing_id)
+            calendar_data = ListingCalendarDataProcessPublic()(query_data, listing_id)
 
         service_charges = list(ServiceCharge.objects.values())
         guest_service_charge = 0
