@@ -135,10 +135,10 @@ class ListingCalendarDataProcessCal:
         from_date = data.get("from_date")
         to_date = data.get("to_date")
 
+        # 1. Get all relevant rules, with the NEWEST ones FIRST.
         listings = list(
             ListingCalendar.objects.filter(
-                Q(end_date__isnull=True)
-                | Q(start_date__lte=to_date, end_date__gte=from_date),
+                Q(end_date__isnull=True) | Q(start_date__lte=to_date, end_date__gte=from_date),
                 listing_id=listing_id,
             ).order_by('-created_at').values(
                 "id",
@@ -152,57 +152,49 @@ class ListingCalendarDataProcessCal:
             )
         )
 
-        new_data = [entry for entry in listings if entry["end_date"] is not None]
-        null_data = [entry for entry in listings if entry["end_date"] is None]
-        listings = null_data + new_data
         formatted_data = {}
 
-        # if not listings:
-        #     for date_obj in date_range(from_date, to_date):
-        #         date_str = str(date_obj)
-        #         formatted_data[date_str] = {
-        #             "id": None,
-        #             "price": listing.price,
-        #             "is_blocked": False,
-        #             "is_booked": False,
-        #             "booking_data": None,
-        #             "note": None,
-        #         }
-        #     return formatted_data
+        # If there are no rules, you may want to handle it (e.g., use listing base price)
+        if not listings:
+            # This part is optional but good practice
+            # listing = Listing.objects.get(id=listing_id)
+            # base_price = listing.price
+            # for date_obj in date_range(from_date, to_date):
+            #     formatted_data[str(date_obj)] = {"price": base_price, ...}
+            return formatted_data
 
-
-        print("listing ----------- ", listings)
+        # 2. Iterate over each day you need to generate data for.
         for date_obj in date_range(from_date, to_date):
             date_str = str(date_obj)
-            formatted_data[date_str] = {
-                "id": listings[0]["id"],
-                "price": listings[0]["custom_price"],
-                "is_blocked": False,
-                "is_booked": False,
-            }
 
+            # 3. Find the FIRST matching rule for that day.
+            # Since the list is sorted by newest first, this will be the correct one.
             for item in listings:
                 start_date = item["start_date"]
                 end_date = item["end_date"]
-                price = item["custom_price"]
-                is_blocked = item["is_blocked"]
-                is_booked = item["is_booked"]
-                listing_calendar_id = item["id"]
-                booking_data = item["booking_data"]
-                date_range_end = end_date if end_date is not None else to_date
-                if date_obj in date_range(
-                    start_date, date_range_end
-                ):  # date_obj >= start_date and  date_obj <= date_range_end
+
+                # Check if the current day falls within the rule's date range
+                rule_applies = False
+                if end_date is None and date_obj >= start_date:
+                    # This is a rule with no end date (e.g., "price is 10 from now on")
+                    rule_applies = True
+                elif end_date is not None and start_date <= date_obj <= end_date:
+                    # This is a rule for a specific date range
+                    rule_applies = True
+
+                if rule_applies:
+                    # Found the newest rule that applies. Use it.
                     formatted_data[date_str] = {
-                        "id": listing_calendar_id,
-                        "price": price,
-                        "is_blocked": is_blocked,
-                        "is_booked": is_booked,
-                        "booking_data": booking_data,
+                        "id": item["id"],
+                        "price": item["custom_price"],
+                        "is_blocked": item["is_blocked"],
+                        "is_booked": item["is_booked"],
+                        "booking_data": item["booking_data"],
                         "note": item["note"],
                     }
+                    # 4. IMPORTANT: Stop searching for this day and move to the next.
+                    break
 
-        formatted_data = dict(formatted_data)
         return formatted_data
 
 
