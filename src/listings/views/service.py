@@ -1,6 +1,6 @@
 from typing import Any
 from django.db.models import Q
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from base.helpers.utils import calculate_days_between_dates, date_range
 from configurations.models import ServiceCharge
 from listings.models import Listing, ListingAmenity, ListingCalendar
@@ -53,6 +53,46 @@ class ListingCreateDataProcess:
             is_booked=False,
         )
         return None
+
+
+class AvailabilityCheckProcess:
+    """
+    A dedicated process to check if a date range for a given listing is available.
+    Returns a tuple: (is_available: bool, reason: str | None).
+    """
+
+    def __call__(self, listing: Listing, from_date: date, to_date: date) -> tuple[bool, str | None]:
+
+        # 1. Fetch all potentially conflicting calendar "rules".
+        # We only need rules that could block the dates.
+        conflicting_rules = list(
+            ListingCalendar.objects.filter(
+                Q(listing_id=listing.id),
+                # A rule conflicts if it's blocked/booked AND it overlaps with the requested range
+                (Q(is_blocked=True) | Q(is_booked=True)),
+                Q(start_date__lt=to_date, end_date__gte=from_date) |  # Overlaps a range
+                Q(start_date__gte=from_date, start_date__lt=to_date)  # Starts within the range
+            ).values("start_date", "end_date", "is_blocked", "is_booked")
+        )
+
+        # If there are no blocking/booked rules in the overlapping range, the dates are available.
+        if not conflicting_rules:
+            return (True, None)
+
+        # 2. Iterate through the requested date range and check against the conflicting rules.
+        # This is a more precise check to confirm an actual day-by-day overlap.
+        for date_obj in date_range(from_date, to_date - timedelta(days=1)):  # Check each night
+            for rule in conflicting_rules:
+                rule_start = rule["start_date"]
+                rule_end = rule["end_date"] if rule["end_date"] is not None else date.max
+
+                if rule_start <= date_obj <= rule_end:
+                    # Found an overlap with a blocked or booked date. The range is not available.
+                    reason = "blocked/booked." if rule["is_blocked"] else "already booked"
+                    return (False, f"The date {date_obj.strftime('%Y-%m-%d')} is {reason}.")
+
+        # If the loop completes without finding any daily overlaps, the range is available.
+        return (True, None)
 
 
 class ListingCalendarDataProcess:

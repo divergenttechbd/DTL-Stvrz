@@ -29,7 +29,7 @@ from base.type_choices import (
 from bookings.models import Booking
 from bookings.serializers import BookingSerializer
 from listings.models import Listing, ListingCalendar
-from listings.views.service import ListingCalendarDataProcess
+from listings.views.service import ListingCalendarDataProcess, AvailabilityCheckProcess
 from notifications.models import Notification
 from notifications.utils import create_notification, send_notification
 from payments.models import OnlinePayment
@@ -93,22 +93,38 @@ class UserSSLCommerzOrderPaymentView(CreateAPIView):
                 # --- Final Availability Check ---
                 listing = booking.listing
                 calendar_check_end_date = booking.check_out - timedelta(days=1)
-                calendar_data_process = ListingCalendarDataProcess()
-                availability_data = calendar_data_process(
-                    data={"from_date": booking.check_in, "to_date": calendar_check_end_date},
-                    listing_id=listing.id
+                # calendar_data_process = ListingCalendarDataProcess()
+                # availability_data = calendar_data_process(
+                #     data={"from_date": booking.check_in, "to_date": calendar_check_end_date},
+                #     listing_id=listing.id
+                # )
+
+                availability_checker = AvailabilityCheckProcess()
+                is_available, reason = availability_checker(
+                    listing=listing,
+                    from_date=booking.check_in,
+                    to_date=booking.check_out
                 )
 
-                for date_str, data in availability_data.items():
-                    if data.get("is_blocked") or data.get("is_booked"):
-                        booking.status = BookingStatusOption.DECLINED
-                        booking.cancellation_reason = "System cancelled: Dates unavailable before payment."
-                        booking.save()
-                        return Response(
-                            {
-                                "message": f"Sorry, the date {date_str} is no longer available. Your booking has been cancelled."},
-                            status=status.HTTP_409_CONFLICT
-                        )
+                if not is_available:
+                    booking.status = BookingStatusOption.DECLINED
+                    booking.cancellation_reason = f"System cancelled: {reason}"
+                    booking.save()
+                    return Response(
+                        {"message": f"Sorry, this booking is no longer valid. {reason}"},
+                        status=status.HTTP_409_CONFLICT)
+
+
+                # for date_str, data in availability_data.items():
+                #     if data.get("is_blocked") or data.get("is_booked"):
+                #         booking.status = BookingStatusOption.DECLINED
+                #         booking.cancellation_reason = "System cancelled: Dates unavailable before payment."
+                #         booking.save()
+                #         return Response(
+                #             {
+                #                 "message": f"Sorry, the date {date_str} is no longer available. Your booking has been cancelled."},
+                #             status=status.HTTP_409_CONFLICT
+                #         )
 
                 # --- Find or Create OnlinePayment Record ---
                 online_payment, created = OnlinePayment.objects.get_or_create(
