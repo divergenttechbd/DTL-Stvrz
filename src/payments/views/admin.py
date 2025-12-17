@@ -155,6 +155,7 @@ class AdminHostPaymentRetrieveUpdateAPIView(views.APIView):
                     many=True,
                     fields=[
                         "id",
+                        "booking",
                         "reservation_code",
                         "night_count",
                         "guest_count",
